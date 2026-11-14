@@ -10,7 +10,7 @@ export async function GET() {
     claude: cfg.claude,
     model: cfg.claude ? cfg.designerModel : null,
     imageProvider: cfg.imageProvider,
-    storage: process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "supabase" : "local",
+    storage: process.env.HOMER_SUPABASE_URL && process.env.HOMER_SUPABASE_KEY ? "supabase" : "local",
   };
   return NextResponse.json(body);
 }

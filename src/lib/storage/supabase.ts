@@ -3,8 +3,8 @@ import { SceneSchema, type Project } from "@/lib/scene/types";
 import type { ProjectMeta, ProjectRepository, SaveResult } from "./repository";
 
 /**
- * Supabase-backed repository. Requires NEXT_PUBLIC_SUPABASE_URL and
- * NEXT_PUBLIC_SUPABASE_ANON_KEY, the schema in supabase/migrations, and
+ * Supabase-backed repository. Requires HOMER_NEXT_PUBLIC_SUPABASE_URL and
+ * HOMER_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (see next.config.ts), the schema in supabase/migrations, and
  * anonymous sign-ins enabled (or a signed-in user). Row Level Security limits
  * every row to its owner.
  */

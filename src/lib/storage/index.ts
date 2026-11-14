@@ -64,8 +64,8 @@ let repo: ResilientRepository | null = null;
 
 export function getRepository(): ResilientRepository {
   if (repo) return repo;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.HOMER_SUPABASE_URL;
+  const key = process.env.HOMER_SUPABASE_KEY;
   repo = new ResilientRepository(url && key ? new SupabaseProjectRepository(url, key) : new LocalProjectRepository());
   return repo;
 }

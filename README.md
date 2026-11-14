@@ -56,7 +56,7 @@ No keys are required: without `ANTHROPIC_API_KEY` the AI panel runs in clearly l
 
 1. Import the repo in Vercel (framework: Next.js, no extra config).
 2. Add `ANTHROPIC_API_KEY` (and optionally `REPLICATE_API_TOKEN`) as environment variables.
-3. For cloud persistence: apply `supabase/migrations/*.sql` to your Supabase project, enable **Anonymous sign-ins** under Auth settings, then set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+3. For cloud persistence: apply `supabase/migrations/*.sql` to your Supabase project, enable **Anonymous sign-ins** under Auth settings, then set `HOMER_NEXT_PUBLIC_SUPABASE_URL` and `HOMER_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Homer ignores the generic `NEXT_PUBLIC_SUPABASE_*` names so it never connects to another app's project.
 
 AI routes set `maxDuration` (120 s) for longer tool loops; on the Hobby plan Vercel caps functions lower.
 
