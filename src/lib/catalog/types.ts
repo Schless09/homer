@@ -1,0 +1,124 @@
+import type { RoomType } from "@/lib/scene/types";
+
+export const CATEGORIES = [
+  { id: "sofas", label: "Sofas" },
+  { id: "sectionals", label: "Sectionals" },
+  { id: "chairs", label: "Lounge chairs" },
+  { id: "beds", label: "Beds" },
+  { id: "nightstands", label: "Nightstands" },
+  { id: "dressers", label: "Dressers" },
+  { id: "desks", label: "Desks" },
+  { id: "dining-tables", label: "Dining tables" },
+  { id: "dining-chairs", label: "Dining chairs" },
+  { id: "coffee-tables", label: "Coffee tables" },
+  { id: "side-tables", label: "Side tables" },
+  { id: "tv-stands", label: "TV stands" },
+  { id: "tvs", label: "TVs" },
+  { id: "rugs", label: "Rugs" },
+  { id: "lamps", label: "Lamps" },
+  { id: "plants", label: "Plants" },
+  { id: "storage", label: "Storage" },
+  { id: "decor", label: "Decor" },
+  { id: "fixtures", label: "Room fixtures" },
+] as const;
+export type CategoryId = (typeof CATEGORIES)[number]["id"];
+
+export const STYLES = [
+  "modern",
+  "minimalist",
+  "scandinavian",
+  "mid-century",
+  "industrial",
+  "japandi",
+  "luxury",
+  "boho",
+  "traditional",
+  "coastal",
+] as const;
+export type Style = (typeof STYLES)[number];
+
+export type ModelKind =
+  | "bed"
+  | "bunk"
+  | "sofa"
+  | "sectional"
+  | "loveseat"
+  | "armchair"
+  | "coffee-table"
+  | "round-coffee-table"
+  | "side-table"
+  | "dining-table"
+  | "round-table"
+  | "chair"
+  | "stool"
+  | "bench"
+  | "desk"
+  | "office-chair"
+  | "dresser"
+  | "nightstand"
+  | "wardrobe"
+  | "bookshelf"
+  | "tv-stand"
+  | "tv"
+  | "rug"
+  | "round-rug"
+  | "floor-lamp"
+  | "table-lamp"
+  | "plant"
+  | "ottoman"
+  | "console"
+  | "mirror"
+  | "counter"
+  | "island"
+  | "fridge"
+  | "range"
+  | "sink-counter"
+  | "toilet"
+  | "tub"
+  | "shower"
+  | "vanity"
+  | "closet"
+  | "washer";
+
+/** How the layout solver places an item. */
+export type Placement =
+  | "wall" // back against a wall, facing into the room
+  | "free" // anywhere with clearance
+  | "corner" // tucked into a corner
+  | "onTop"; // sits on another item (TV on stand, lamp on nightstand)
+
+/** Collision layer: rugs sit under furniture; surface items sit on top of other pieces. */
+export type Layer = "floor" | "rug" | "surface" | "wall-mounted";
+
+export interface Finish {
+  name: string;
+  hex: string;
+}
+
+export interface CatalogItem {
+  id: string;
+  name: string;
+  category: CategoryId;
+  model: ModelKind;
+  width: number;
+  depth: number;
+  height: number;
+  /** sample price in USD; NOT a real retailer price */
+  price: number;
+  styles: Style[];
+  colors: Finish[];
+  materials: string[];
+  description: string;
+  placement: Placement;
+  layer: Layer;
+  /** recommended clear space (inches) in front of / beside the piece */
+  clearance: { front?: number; sides?: number; all?: number };
+  roomTypes: RoomType[];
+  resizable?: boolean;
+  fixture?: boolean;
+  /** affiliate/retailer integration point; empty for built-in sample items */
+  productUrl?: string;
+  /** a GLB model URL can be attached later; procedural geometry is the fallback */
+  modelUrl?: string;
+  source: "sample" | "retailer" | "user";
+}
