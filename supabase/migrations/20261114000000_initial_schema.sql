@@ -8,13 +8,8 @@
 
 create extension if not exists "pgcrypto";
 
--- ───────────────────────── profiles & preferences ─────────────────────────
-create table if not exists public.profiles (
-  id uuid primary key references auth.users (id) on delete cascade,
-  display_name text,
-  created_at timestamptz not null default now()
-);
-
+-- ───────────────────────── preferences ─────────────────────────
+-- (no `profiles` table here: the project may already define its own)
 create table if not exists public.user_preferences (
   user_id uuid primary key references auth.users (id) on delete cascade,
   style text,
@@ -156,7 +151,6 @@ create table if not exists public.generated_visualizations (
 );
 
 -- ───────────────────────── RLS ─────────────────────────
-alter table public.profiles enable row level security;
 alter table public.user_preferences enable row level security;
 alter table public.projects enable row level security;
 alter table public.floor_plans enable row level security;
@@ -168,7 +162,7 @@ alter table public.ai_messages enable row level security;
 alter table public.ai_actions enable row level security;
 alter table public.generated_visualizations enable row level security;
 
-create policy "own profile" on public.profiles for all using (id = (select auth.uid())) with check (id = (select auth.uid()));
+drop policy if exists "own preferences" on public.user_preferences;
 create policy "own preferences" on public.user_preferences for all using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 do $$
@@ -176,6 +170,10 @@ declare t text;
 begin
   foreach t in array array['projects', 'floor_plans', 'design_layouts', 'furniture_instances', 'ai_conversations', 'ai_messages', 'ai_actions', 'generated_visualizations']
   loop
+    execute format('drop policy if exists "owner select" on public.%I', t);
+    execute format('drop policy if exists "owner insert" on public.%I', t);
+    execute format('drop policy if exists "owner update" on public.%I', t);
+    execute format('drop policy if exists "owner delete" on public.%I', t);
     execute format('create policy "owner select" on public.%I for select using (owner_id = (select auth.uid()))', t);
     execute format('create policy "owner insert" on public.%I for insert with check (owner_id = (select auth.uid()))', t);
     execute format('create policy "owner update" on public.%I for update using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()))', t);
@@ -184,9 +182,13 @@ begin
 end $$;
 
 -- catalog: everyone signed in can read retailer/sample items; users manage their own
+drop policy if exists "catalog read" on public.furniture_catalog;
 create policy "catalog read" on public.furniture_catalog for select using (owner_id is null or owner_id = (select auth.uid()));
+drop policy if exists "catalog own insert" on public.furniture_catalog;
 create policy "catalog own insert" on public.furniture_catalog for insert with check (source = 'user' and owner_id = (select auth.uid()));
+drop policy if exists "catalog own update" on public.furniture_catalog;
 create policy "catalog own update" on public.furniture_catalog for update using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists "catalog own delete" on public.furniture_catalog;
 create policy "catalog own delete" on public.furniture_catalog for delete using (owner_id = (select auth.uid()));
 
 -- ───────────────────────── storage ─────────────────────────
@@ -194,11 +196,15 @@ insert into storage.buckets (id, name, public)
 values ('floorplans', 'floorplans', false)
 on conflict (id) do nothing;
 
+drop policy if exists "floorplans own read" on storage.objects;
 create policy "floorplans own read" on storage.objects for select
   using (bucket_id = 'floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "floorplans own write" on storage.objects;
 create policy "floorplans own write" on storage.objects for insert
   with check (bucket_id = 'floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "floorplans own update" on storage.objects;
 create policy "floorplans own update" on storage.objects for update
   using (bucket_id = 'floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "floorplans own delete" on storage.objects;
 create policy "floorplans own delete" on storage.objects for delete
   using (bucket_id = 'floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
