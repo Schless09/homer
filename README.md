@@ -32,7 +32,7 @@ Floor plan upload ──▶ AI extraction (pixels) ──▶ user-confirmed scal
 - `src/lib/ai/`: request/response types, the rule-based demo designer, and `server/` (Claude tool loop, floor plan vision, render provider). API keys stay server-side.
 - `src/store/`: Zustand editor store (scene, history, selection, preview) and viewport.
 - `src/components/editor/`: the three-panel editor, `plan/` (Konva) and `three/` (R3F).
-- `supabase/migrations/`: schema with Row Level Security on every table and a private `floorplans` storage bucket.
+- `supabase/migrations/`: schema with Row Level Security on every table and a private storage bucket. Every object is prefixed `homer_` (bucket `homer-floorplans`), so it can share a Supabase project with other apps.
 
 ### AI design loop
 

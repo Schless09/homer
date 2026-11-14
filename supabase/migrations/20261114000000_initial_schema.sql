@@ -1,5 +1,6 @@
 -- Homer: AI interior design & space planning
--- Initial schema. The editable scene lives in projects.scene (jsonb, the canonical
+-- Initial schema. Every object is prefixed `homer_` / `homer-` so this can live
+-- in a Supabase project shared with other apps without touching their tables. The editable scene lives in projects.scene (jsonb, the canonical
 -- model shared by the 2D editor, 3D view, solver and AI). Relational tables hold
 -- entities we query or audit independently. Every table is owner-scoped via RLS.
 --
@@ -9,8 +10,7 @@
 create extension if not exists "pgcrypto";
 
 -- ───────────────────────── preferences ─────────────────────────
--- (no `profiles` table here: the project may already define its own)
-create table if not exists public.user_preferences (
+create table if not exists public.homer_user_preferences (
   user_id uuid primary key references auth.users (id) on delete cascade,
   style text,
   budget_usd numeric,
@@ -19,7 +19,7 @@ create table if not exists public.user_preferences (
 );
 
 -- ───────────────────────── projects ─────────────────────────
-create table if not exists public.projects (
+create table if not exists public.homer_projects (
   id text primary key,
   owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name text not null,
@@ -35,12 +35,12 @@ create table if not exists public.projects (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index if not exists projects_owner_updated_idx on public.projects (owner_id, updated_at desc);
+create index if not exists homer_projects_owner_updated_idx on public.homer_projects (owner_id, updated_at desc);
 
 -- uploaded floor plans + AI extraction results (pixel space) and calibration
-create table if not exists public.floor_plans (
+create table if not exists public.homer_floor_plans (
   id uuid primary key default gen_random_uuid(),
-  project_id text not null references public.projects (id) on delete cascade,
+  project_id text not null references public.homer_projects (id) on delete cascade,
   owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   storage_path text not null,
   width_px integer not null,
@@ -52,9 +52,9 @@ create table if not exists public.floor_plans (
 );
 
 -- saved layout alternatives (e.g. "Maximum open space")
-create table if not exists public.design_layouts (
+create table if not exists public.homer_design_layouts (
   id uuid primary key default gen_random_uuid(),
-  project_id text not null references public.projects (id) on delete cascade,
+  project_id text not null references public.homer_projects (id) on delete cascade,
   owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name text not null,
   strategy text,
@@ -65,7 +65,7 @@ create table if not exists public.design_layouts (
 
 -- ───────────────────────── catalog ─────────────────────────
 -- Public catalog (sample items ship in code; retailer feeds land here).
-create table if not exists public.furniture_catalog (
+create table if not exists public.homer_furniture_catalog (
   id text primary key,
   source text not null default 'retailer' check (source in ('sample', 'retailer', 'user')),
   owner_id uuid references auth.users (id) on delete cascade, -- set for user-created items
@@ -85,12 +85,12 @@ create table if not exists public.furniture_catalog (
   retailer text,
   updated_at timestamptz not null default now()
 );
-create index if not exists furniture_catalog_category_idx on public.furniture_catalog (category);
+create index if not exists homer_furniture_catalog_category_idx on public.homer_furniture_catalog (category);
 
 -- denormalized furniture placements for analytics/shopping lists (scene jsonb stays canonical)
-create table if not exists public.furniture_instances (
+create table if not exists public.homer_furniture_instances (
   id text not null,
-  project_id text not null references public.projects (id) on delete cascade,
+  project_id text not null references public.homer_projects (id) on delete cascade,
   owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   catalog_id text not null,
   x_in numeric not null,
@@ -104,16 +104,16 @@ create table if not exists public.furniture_instances (
 );
 
 -- ───────────────────────── AI ─────────────────────────
-create table if not exists public.ai_conversations (
+create table if not exists public.homer_ai_conversations (
   id uuid primary key default gen_random_uuid(),
-  project_id text not null references public.projects (id) on delete cascade,
+  project_id text not null references public.homer_projects (id) on delete cascade,
   owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
-create table if not exists public.ai_messages (
+create table if not exists public.homer_ai_messages (
   id uuid primary key default gen_random_uuid(),
-  conversation_id uuid not null references public.ai_conversations (id) on delete cascade,
+  conversation_id uuid not null references public.homer_ai_conversations (id) on delete cascade,
   owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   role text not null check (role in ('user', 'assistant')),
   content text not null,
@@ -125,19 +125,19 @@ create table if not exists public.ai_messages (
 );
 
 -- every validated action the AI proposed, and whether the user accepted it
-create table if not exists public.ai_actions (
+create table if not exists public.homer_ai_actions (
   id uuid primary key default gen_random_uuid(),
-  message_id uuid references public.ai_messages (id) on delete cascade,
-  project_id text not null references public.projects (id) on delete cascade,
+  message_id uuid references public.homer_ai_messages (id) on delete cascade,
+  project_id text not null references public.homer_projects (id) on delete cascade,
   owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   action jsonb not null,
   status text not null default 'proposed' check (status in ('proposed', 'accepted', 'rejected', 'invalid')),
   created_at timestamptz not null default now()
 );
 
-create table if not exists public.generated_visualizations (
+create table if not exists public.homer_generated_visualizations (
   id uuid primary key default gen_random_uuid(),
-  project_id text not null references public.projects (id) on delete cascade,
+  project_id text not null references public.homer_projects (id) on delete cascade,
   owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   provider text not null,
   provider_job_id text,
@@ -151,24 +151,24 @@ create table if not exists public.generated_visualizations (
 );
 
 -- ───────────────────────── RLS ─────────────────────────
-alter table public.user_preferences enable row level security;
-alter table public.projects enable row level security;
-alter table public.floor_plans enable row level security;
-alter table public.design_layouts enable row level security;
-alter table public.furniture_catalog enable row level security;
-alter table public.furniture_instances enable row level security;
-alter table public.ai_conversations enable row level security;
-alter table public.ai_messages enable row level security;
-alter table public.ai_actions enable row level security;
-alter table public.generated_visualizations enable row level security;
+alter table public.homer_user_preferences enable row level security;
+alter table public.homer_projects enable row level security;
+alter table public.homer_floor_plans enable row level security;
+alter table public.homer_design_layouts enable row level security;
+alter table public.homer_furniture_catalog enable row level security;
+alter table public.homer_furniture_instances enable row level security;
+alter table public.homer_ai_conversations enable row level security;
+alter table public.homer_ai_messages enable row level security;
+alter table public.homer_ai_actions enable row level security;
+alter table public.homer_generated_visualizations enable row level security;
 
-drop policy if exists "own preferences" on public.user_preferences;
-create policy "own preferences" on public.user_preferences for all using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists "own preferences" on public.homer_user_preferences;
+create policy "own preferences" on public.homer_user_preferences for all using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 do $$
 declare t text;
 begin
-  foreach t in array array['projects', 'floor_plans', 'design_layouts', 'furniture_instances', 'ai_conversations', 'ai_messages', 'ai_actions', 'generated_visualizations']
+  foreach t in array array['homer_projects', 'homer_floor_plans', 'homer_design_layouts', 'homer_furniture_instances', 'homer_ai_conversations', 'homer_ai_messages', 'homer_ai_actions', 'homer_generated_visualizations']
   loop
     execute format('drop policy if exists "owner select" on public.%I', t);
     execute format('drop policy if exists "owner insert" on public.%I', t);
@@ -182,29 +182,29 @@ begin
 end $$;
 
 -- catalog: everyone signed in can read retailer/sample items; users manage their own
-drop policy if exists "catalog read" on public.furniture_catalog;
-create policy "catalog read" on public.furniture_catalog for select using (owner_id is null or owner_id = (select auth.uid()));
-drop policy if exists "catalog own insert" on public.furniture_catalog;
-create policy "catalog own insert" on public.furniture_catalog for insert with check (source = 'user' and owner_id = (select auth.uid()));
-drop policy if exists "catalog own update" on public.furniture_catalog;
-create policy "catalog own update" on public.furniture_catalog for update using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
-drop policy if exists "catalog own delete" on public.furniture_catalog;
-create policy "catalog own delete" on public.furniture_catalog for delete using (owner_id = (select auth.uid()));
+drop policy if exists "catalog read" on public.homer_furniture_catalog;
+create policy "catalog read" on public.homer_furniture_catalog for select using (owner_id is null or owner_id = (select auth.uid()));
+drop policy if exists "catalog own insert" on public.homer_furniture_catalog;
+create policy "catalog own insert" on public.homer_furniture_catalog for insert with check (source = 'user' and owner_id = (select auth.uid()));
+drop policy if exists "catalog own update" on public.homer_furniture_catalog;
+create policy "catalog own update" on public.homer_furniture_catalog for update using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists "catalog own delete" on public.homer_furniture_catalog;
+create policy "catalog own delete" on public.homer_furniture_catalog for delete using (owner_id = (select auth.uid()));
 
 -- ───────────────────────── storage ─────────────────────────
 insert into storage.buckets (id, name, public)
-values ('floorplans', 'floorplans', false)
+values ('homer-floorplans', 'homer-floorplans', false)
 on conflict (id) do nothing;
 
-drop policy if exists "floorplans own read" on storage.objects;
-create policy "floorplans own read" on storage.objects for select
-  using (bucket_id = 'floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
-drop policy if exists "floorplans own write" on storage.objects;
-create policy "floorplans own write" on storage.objects for insert
-  with check (bucket_id = 'floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
-drop policy if exists "floorplans own update" on storage.objects;
-create policy "floorplans own update" on storage.objects for update
-  using (bucket_id = 'floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
-drop policy if exists "floorplans own delete" on storage.objects;
-create policy "floorplans own delete" on storage.objects for delete
-  using (bucket_id = 'floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "homer floorplans own read" on storage.objects;
+create policy "homer floorplans own read" on storage.objects for select
+  using (bucket_id = 'homer-floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "homer floorplans own write" on storage.objects;
+create policy "homer floorplans own write" on storage.objects for insert
+  with check (bucket_id = 'homer-floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "homer floorplans own update" on storage.objects;
+create policy "homer floorplans own update" on storage.objects for update
+  using (bucket_id = 'homer-floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "homer floorplans own delete" on storage.objects;
+create policy "homer floorplans own delete" on storage.objects for delete
+  using (bucket_id = 'homer-floorplans' and (storage.foldername(name))[1] = (select auth.uid())::text);

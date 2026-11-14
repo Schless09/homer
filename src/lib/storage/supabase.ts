@@ -24,7 +24,9 @@ interface ProjectRow {
   updated_at: string;
 }
 
-const BUCKET = "floorplans";
+/** everything is prefixed so the app can share a Supabase project with other apps */
+const TABLE = "homer_projects";
+const BUCKET = "homer-floorplans";
 
 function rowToProject(r: ProjectRow): Project {
   return {
@@ -86,7 +88,7 @@ export class SupabaseProjectRepository implements ProjectRepository {
   async list(): Promise<ProjectMeta[]> {
     await this.userId;
     const { data, error } = await this.client
-      .from("projects")
+      .from(TABLE)
       .select("id,name,unit_type,thumbnail,item_count,created_at,updated_at")
       .order("updated_at", { ascending: false });
     if (error) throw error;
@@ -103,21 +105,21 @@ export class SupabaseProjectRepository implements ProjectRepository {
 
   async get(id: string) {
     await this.userId;
-    const { data, error } = await this.client.from("projects").select("*").eq("id", id).maybeSingle();
+    const { data, error } = await this.client.from(TABLE).select("*").eq("id", id).maybeSingle();
     if (error) throw error;
     return data ? rowToProject(data as ProjectRow) : null;
   }
 
   async create(p: Project) {
     const owner = await this.userId;
-    const { error } = await this.client.from("projects").insert({ ...this.toRow(p, owner, p.revision), created_at: new Date(p.createdAt).toISOString() });
+    const { error } = await this.client.from(TABLE).insert({ ...this.toRow(p, owner, p.revision), created_at: new Date(p.createdAt).toISOString() });
     if (error) throw error;
   }
 
   async save(p: Project, expectedRevision: number): Promise<SaveResult> {
     const owner = await this.userId;
     const { data, error } = await this.client
-      .from("projects")
+      .from(TABLE)
       .update(this.toRow(p, owner, expectedRevision + 1))
       .eq("id", p.id)
       .eq("revision", expectedRevision)
@@ -133,7 +135,7 @@ export class SupabaseProjectRepository implements ProjectRepository {
   }
 
   async remove(id: string) {
-    const { error } = await this.client.from("projects").delete().eq("id", id);
+    const { error } = await this.client.from(TABLE).delete().eq("id", id);
     if (error) throw error;
   }
 
