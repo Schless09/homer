@@ -11,7 +11,10 @@ const PROMPT = (w: number, h: number) => `This is an apartment floor plan image,
 - rooms: one polygon per room following the interior faces of its walls; name it as labeled (or by function) and classify the type. If the plan prints room dimensions (e.g. "12'6\\" x 11'"), copy that text to labeled_dimensions.
 - fixtures: built-ins drawn on the plan (kitchen counters, island, fridge, range, sink, toilet, tub, shower, vanity, closets, washer/dryer) with center, size in pixels and rotation in degrees (0 = front faces down the image).
 - dimension_annotations: every printed measurement you can read, with its value in inches and the pixel endpoints of what it measures. Only include ones you can actually read; never guess.
+- stated_total_sqft: the unit's total area if printed anywhere in the image (e.g. "609 sq. ft."), else null.
+- plan_name: the unit or floor plan name if printed (e.g. "East 02", "Plan A1"), else null.
 - notes: anything uncertain.
+The image may be a screenshot with other content (phone UI, listing text, prices). Only extract the floor plan drawing itself.
 
 Be geometrically careful: walls should meet at corners, and rooms should not overlap.`;
 

@@ -273,6 +273,25 @@ function layoutResponse(
       }
     }
   }
+  // In a tight space, a good designer leaves pieces out rather than blocking walkways and appliances.
+  const trimmed: string[] = [];
+  if (chosen.cost > 0 && !opts.keepExisting) {
+    const dropOrder = ["plant", "lamp", "armchair", "table-lamp", "books", "bench", "rug", "office-chair", "desk", "chairs", "dining"];
+    let current = wishes;
+    for (const key of dropOrder) {
+      if (chosen.cost === 0) break;
+      const idx = current.findIndex((w) => w.key === key);
+      if (idx < 0) continue;
+      const without = current.filter((_, i) => i !== idx);
+      const t = solve(without);
+      if (t.cost < chosen.cost) {
+        trimmed.push(getCatalogItem(current[idx].catalogId)?.name ?? key);
+        chosen = t;
+        current = without;
+      }
+    }
+    wishes = current;
+  }
   const res = chosen.r;
   const actions: DesignAction[] = [{ action: "set_layout", items: res.items }];
   if (opts.palette) {
@@ -292,6 +311,7 @@ function layoutResponse(
   for (const f of res.failed) {
     lines.push(`⚠ ${f.reason}${f.suggestion ? ` A ${f.suggestion.name} (${formatFtIn(f.suggestion.width)} wide) would fit.` : ""}`);
   }
+  if (trimmed.length) lines.push(`To keep walkways and the kitchen clear in this space, I left out: ${trimmed.join(", ")}.`);
   if (m.warnings + m.errors > 0) lines.push(`I flagged ${m.warnings + m.errors} spacing note(s) in the Space check panel.`);
   const note = retailNote(wishes);
   if (note) lines.push(note);

@@ -84,11 +84,49 @@ export function roomsContainingRect(rooms: Room[], r: Rect): boolean {
   return corners.every((c) => rooms.some((room) => pointInPolygon(c, room.polygon, 1)));
 }
 
+/** Convex outline of the apartment from its exterior walls (or all walls), cached per walls array. */
+const envelopeCache = new WeakMap<Scene["walls"], { x: number; y: number }[]>();
+function envelope(scene: Scene): { x: number; y: number }[] {
+  const hit = envelopeCache.get(scene.walls);
+  if (hit) return hit;
+  const ext = scene.walls.filter((w) => w.exterior);
+  const pts = (ext.length >= 3 ? ext : scene.walls).flatMap((w) => [w.a, w.b]);
+  let hull: { x: number; y: number }[] = [];
+  if (pts.length >= 3) {
+    const ps = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower: typeof ps = [];
+    for (const p of ps) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    const upper: typeof ps = [];
+    for (const p of [...ps].reverse()) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    hull = [...lower.slice(0, -1), ...upper.slice(0, -1)];
+  }
+  envelopeCache.set(scene.walls, hull);
+  return hull;
+}
+
+/**
+ * Inside the home: each corner is in a traced room, or within the apartment's outer walls.
+ * Traced room outlines often leave gaps (hallways, nooks), so they alone would raise false alarms;
+ * crossing an actual wall is caught separately.
+ */
+export function insideHome(scene: Scene, r: Rect): boolean {
+  if (scene.rooms.length === 0 && scene.walls.length === 0) return true;
+  const env = envelope(scene);
+  return rectCorners(r).every((c) => scene.rooms.some((room) => pointInPolygon(c, room.polygon, 1)) || (env.length >= 3 && pointInPolygon(c, env, 1)));
+}
+
 export function roomAt(rooms: Room[], x: number, y: number): Room | undefined {
   return rooms.find((r) => pointInPolygon({ x, y }, r.polygon, 0));
 }
 
-function rectHitsWalls(scene: Scene, r: Rect): boolean {
+export function rectHitsWalls(scene: Scene, r: Rect): boolean {
   const poly = rectCorners(r);
   for (const w of scene.walls) {
     for (const piece of wallSolidRects(w, scene.openings)) {
@@ -100,7 +138,7 @@ function rectHitsWalls(scene: Scene, r: Rect): boolean {
 
 function zoneBlocked(scene: Scene, owner: Item, zone: Rect): { by: "wall" | "outside" | Item } | null {
   if (rectHitsWalls(scene, zone)) return { by: "wall" };
-  if (!roomsContainingRect(scene.rooms, zone)) return { by: "outside" };
+  if (!insideHome(scene, zone)) return { by: "outside" };
   const ownerFixed = !!cat(owner)?.fixture;
   for (const other of scene.items) {
     if (other.id === owner.id) continue;
@@ -125,13 +163,16 @@ export function validateItem(scene: Scene, item: Item): Issue[] {
   const r = itemRect(item);
   const name = nameOf(item);
 
-  if (!roomsContainingRect(scene.rooms, r)) {
-    issues.push({ id: `${item.id}:oob`, itemId: item.id, severity: "error", kind: "out-of-bounds", message: `${name} extends outside the room.` });
+  // Built-in fixtures come from the floor plan itself; small mismatches against traced room
+  // outlines and wall lines aren't something the user can act on, so they aren't flagged.
+  const builtIn = !!c?.fixture && item.fixed;
+  if (!builtIn && !insideHome(scene, r)) {
+    issues.push({ id: `${item.id}:oob`, itemId: item.id, severity: "error", kind: "out-of-bounds", message: `${name} extends past the apartment's walls.` });
   }
 
   if (layer === "surface" || layer === "wall-mounted") return issues;
 
-  if (layer === "floor" && rectHitsWalls(scene, r)) {
+  if (layer === "floor" && !builtIn && rectHitsWalls(scene, r)) {
     issues.push({ id: `${item.id}:wall`, itemId: item.id, severity: "error", kind: "wall", message: `${name} intersects a wall.` });
   }
 
@@ -183,7 +224,8 @@ export function validateItem(scene: Scene, item: Item): Issue[] {
       if (cl.front) {
         const zone = frontZone(r, cl.front);
         const blocked = zoneBlocked(scene, item, zone);
-        if (blocked) {
+        // a built-in hemmed in by the architecture is just how the apartment is; only furniture in the way is actionable
+        if (blocked && !(builtIn && (blocked.by === "wall" || blocked.by === "outside"))) {
           const what = blocked.by === "wall" ? "a wall" : blocked.by === "outside" ? "the room edge" : nameOf(blocked.by);
           issues.push({ id: `${item.id}:front`, itemId: item.id, severity: "warning", kind: "clearance", message: `${name} needs ${formatFtIn(cl.front)} clear in front; blocked by ${what}.`, zone });
         }
@@ -198,7 +240,7 @@ export function validateItem(scene: Scene, item: Item): Issue[] {
       if (cl.all) {
         const zone = expandRect(r, { front: cl.all, back: cl.all, left: cl.all, right: cl.all });
         const blocked = zoneBlocked(scene, item, zone);
-        if (blocked) {
+        if (blocked && !(builtIn && (blocked.by === "wall" || blocked.by === "outside"))) {
           const what = blocked.by === "wall" ? "a wall" : blocked.by === "outside" ? "the room edge" : nameOf(blocked.by);
           issues.push({ id: `${item.id}:all`, itemId: item.id, severity: "warning", kind: "clearance", message: `${name} needs ${formatFtIn(cl.all)} around it for chairs and walking; tight near ${what}.`, zone });
         }

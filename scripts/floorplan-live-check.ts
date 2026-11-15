@@ -31,7 +31,8 @@ async function main() {
   }
   for (const d of ex.dimension_annotations) console.log(`  dim "${d.text}" = ${d.inches}" over ${Math.round(Math.hypot(d.x2 - d.x1, d.y2 - d.y1))}px`);
   const s = suggestScale(ex, 1);
-  console.log("suggested scale:", s ? `${s.inchesPerPx.toFixed(3)} in/px from ${s.basis}` : "none");
+  console.log("stated total sqft:", ex.stated_total_sqft);
+  console.log("suggested scale:", s ? `${s.inchesPerPx.toFixed(3)} in/px from ${s.basis} [${s.confidence}]${s.areaCheck ? ` area ${s.areaCheck.computedSqft} vs listed ${s.areaCheck.statedSqft} ${s.areaCheck.ok ? "ok" : "MISMATCH"}` : ""}` : "none");
   const ext = ex.walls.filter((w) => w.exterior);
   if (ext.length) {
     const xs = ext.flatMap((w) => [w.x1, w.x2]);

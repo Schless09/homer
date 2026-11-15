@@ -191,20 +191,25 @@ const ZONE_GUESTS: Partial<Record<ModelKind, ModelKind[]>> = {
   counter: ["stool"],
 };
 
-function intrudesZones(ctx: Ctx, cand: Item): boolean {
+/** "fixture" = blocks a built-in's working space (kitchen, bath, laundry): never allowed. */
+function intrudesZones(ctx: Ctx, cand: Item): false | "furniture" | "fixture" {
   const cc = getCatalogItem(cand.catalogId);
   if (!cc || cc.layer !== "floor") return false;
   const r = itemRect(cand);
+  let hit: false | "furniture" = false;
   for (const other of ctx.items) {
     const oc = getCatalogItem(other.catalogId);
     if (!oc) continue;
     const guests = ZONE_GUESTS[oc.model] ?? [];
     if (guests.includes(cc.model)) continue;
     for (const z of zonesOf(other)) {
-      if (rectsOverlap(r, z, 1)) return true;
+      if (rectsOverlap(r, z, 1)) {
+        if (oc.fixture) return "fixture";
+        hit = "furniture";
+      }
     }
   }
-  return false;
+  return hit;
 }
 
 interface Candidate {
@@ -225,7 +230,9 @@ function check(ctx: Ctx, cand: Item, strict: boolean): { ok: boolean; penalty: n
     }
     if (i.kind === "window") penalty += 6;
   }
-  if (intrudesZones(ctx, cand)) {
+  const intrusion = intrudesZones(ctx, cand);
+  if (intrusion === "fixture") return { ok: false, penalty: 0 };
+  if (intrusion) {
     if (strict) return { ok: false, penalty: 0 };
     penalty += 25;
   }

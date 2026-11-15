@@ -69,3 +69,20 @@ export async function prepareForVision(url: string): Promise<{ data: string; wid
   const dataUrl = c.toDataURL("image/jpeg", 0.9);
   return { data: dataUrl.split(",")[1], width: w, height: h, factor };
 }
+
+/** Crop the uploaded plan to a region (original pixels) so only the blueprint is kept. */
+export async function cropPlan(url: string, region: { x: number; y: number; w: number; h: number }): Promise<{ blob: Blob; x: number; y: number; width: number; height: number }> {
+  const img = await loadImage(url);
+  const x = Math.max(0, Math.floor(region.x));
+  const y = Math.max(0, Math.floor(region.y));
+  const width = Math.min(img.naturalWidth - x, Math.ceil(region.w));
+  const height = Math.min(img.naturalHeight - y, Math.ceil(region.h));
+  const c = document.createElement("canvas");
+  c.width = width;
+  c.height = height;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+  return { blob: await canvasToBlob(c), x, y, width, height };
+}

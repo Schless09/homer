@@ -52,6 +52,10 @@ export const FloorplanExtractionSchema = z.object({
       y2: z.number(),
     }),
   ),
+  /** total area printed on the plan or listing (e.g. "609 sq ft"), else null */
+  stated_total_sqft: z.number().nullable(),
+  /** unit / plan name printed on the image (e.g. "East 02"), else null */
+  plan_name: z.string().nullable(),
   notes: z.string(),
 });
 export type FloorplanExtraction = z.infer<typeof FloorplanExtractionSchema>;

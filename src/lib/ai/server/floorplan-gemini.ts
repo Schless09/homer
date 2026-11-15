@@ -33,6 +33,8 @@ const NormalizedSchema = z.object({
     }),
   ),
   dimension_annotations: z.array(z.object({ text: z.string(), inches: N, x1: N, y1: N, x2: N, y2: N })),
+  stated_total_sqft: N.nullable(),
+  plan_name: z.string().nullable(),
   notes: z.string(),
 });
 
@@ -45,6 +47,9 @@ COORDINATES: every coordinate is an integer on a 0-1000 normalized grid: x from 
 - rooms: one polygon per room following the interior faces of its walls, listed clockwise. Name it as labeled (or by function) and classify the type. If the plan prints room dimensions (e.g. 12'6" x 11'), copy that text to labeled_dimensions, else null.
 - fixtures: built-ins drawn on the plan (kitchen counters, island, refrigerator, range, sink, toilet, bathtub, shower, vanity, closets, washer/dryer) with center x,y, width/depth on the grid (x-axis scale) and rotation in degrees (0 = front faces down the image).
 - dimension_annotations: every printed measurement you can actually read, with its value converted to inches and the grid endpoints of what it measures. Never guess a measurement.
+- stated_total_sqft: the unit's total area if printed anywhere in the image (e.g. "609 sq. ft."), else null.
+- plan_name: the unit or floor plan name if printed (e.g. "East 02", "Plan A1"), else null.
+- The image may be a screenshot with other content (phone UI, listing text, prices). Only extract the floor plan drawing itself.
 - notes: anything uncertain.
 
 Return only JSON matching the schema.`;
@@ -62,6 +67,8 @@ export function denormalize(n: Normalized, width: number, height: number): Floor
     rooms: n.rooms.map((r) => ({ name: r.name, type: r.type, polygon: r.polygon.map((p) => ({ x: X(p.x), y: Y(p.y) })), labeled_dimensions: r.labeled_dimensions })),
     fixtures: n.fixtures.map((f) => ({ type: f.type, x: X(f.x), y: Y(f.y), width_px: L(f.width), depth_px: L(f.depth), rotation: f.rotation })),
     dimension_annotations: n.dimension_annotations.map((d) => ({ text: d.text, inches: d.inches, x1: X(d.x1), y1: Y(d.y1), x2: X(d.x2), y2: Y(d.y2) })),
+    stated_total_sqft: n.stated_total_sqft,
+    plan_name: n.plan_name,
     notes: n.notes,
   });
 }
