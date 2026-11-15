@@ -278,6 +278,14 @@ export default function Dashboard() {
           <Link href="/disclosure" className="underline underline-offset-2">
             Affiliate disclosure
           </Link>
+          {" · "}
+          <Link href="/privacy" className="underline underline-offset-2">
+            Privacy
+          </Link>
+          {" · "}
+          <Link href="/about" className="underline underline-offset-2">
+            About
+          </Link>
         </footer>
       </main>
     </div>
