@@ -54,6 +54,10 @@ Retailer products flow in from affiliate network feeds and show up everywhere th
 
 What the importer does: classifies each product into a furniture type, extracts real width × depth (× height) from feed fields, titles or descriptions (inches, cm, feet), and **rejects** anything without stated dimensions, implausible sizes, or non-furniture (pillows, bedding). `npm run feed:check -- feed.csv` previews the result. Height is marked as approximate when a feed lists only the footprint. If a feed includes a GLB model URL, the 3D view loads it, fitted to the listed dimensions.
 
+**How products look.** Each product gets a structured look description: colors, main and frame materials, leg/arm/back style, tufting, cushions, silhouette, rug pattern, finish. With `ANTHROPIC_API_KEY` set, Claude Haiku reads each product photo once at import (about $0.0002 per product; unchanged photos are reused on later syncs). Without a key it's derived from the title and description. The 3D models use it to swap materials (bouclé, velvet, leather, linen, wood, marble, rattan, lacquer…), legs (tapered, turned, hairpin, sled, pedestal, plinth…), arms, backs, tufting and rug patterns, so real products look like themselves while staying exactly to scale.
+
+**Renders with the real products.** With `HOMER_GEMINI_API_KEY`, "Visualize" sends the 3D snapshot plus up to 6 product photos (largest pieces first, fetched server-side from the catalog only) to Gemini's image model, which replaces each simplified piece with the actual product. Renders are labeled as AI-generated previews; the 3D scene stays the dimensional source of truth. Check each affiliate program's terms for using product images in generated imagery.
+
 Disclosure: buy links carry `rel="sponsored"`, and a commission notice appears next to them and at `/disclosure` (US FTC requirement).
 
 ## Running locally

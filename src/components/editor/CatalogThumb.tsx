@@ -20,9 +20,13 @@ export function CatalogThumb({ item, color, size = 64 }: { item: CatalogItem; co
       body = (
         <>
           <rect x={x} y={y} width={w} height={d} rx={2} fill={soft} stroke={ink} strokeWidth={sw} />
-          <rect x={x + 2} y={y + 3} width={w - 4} height={d - 5} rx={2} fill="#fbfaf7" stroke={ink} strokeWidth={sw * 0.8} />
-          <rect x={x + 4} y={y + 5} width={w / 2 - 6} height={d * 0.14} rx={2} fill="#fff" stroke={ink} strokeWidth={0.7} />
-          <rect x={x + w / 2 + 2} y={y + 5} width={w / 2 - 6} height={d * 0.14} rx={2} fill="#fff" stroke={ink} strokeWidth={0.7} />
+          <rect x={x + 2} y={y + 3} width={Math.max(0.5, w - 4)} height={Math.max(0.5, d - 5)} rx={2} fill="#fbfaf7" stroke={ink} strokeWidth={sw * 0.8} />
+          {w > 16 && (
+            <>
+              <rect x={x + 4} y={y + 5} width={w / 2 - 6} height={d * 0.14} rx={2} fill="#fff" stroke={ink} strokeWidth={0.7} />
+              <rect x={x + w / 2 + 2} y={y + 5} width={w / 2 - 6} height={d * 0.14} rx={2} fill="#fff" stroke={ink} strokeWidth={0.7} />
+            </>
+          )}
           <line x1={x + 2} x2={x + w - 2} y1={y + d * 0.35} y2={y + d * 0.35} stroke={ink} strokeWidth={0.7} />
         </>
       );

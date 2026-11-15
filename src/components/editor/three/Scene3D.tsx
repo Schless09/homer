@@ -12,7 +12,7 @@ import type { Item, Opening, Scene, Wall } from "@/lib/scene/types";
 import { validateScene } from "@/lib/scene/validate";
 import { useDisplayScene, useEditor } from "@/store/editor";
 import { useViewport } from "@/store/viewport";
-import { Furniture3D } from "./Furniture3D";
+import { Furniture3D, LookProvider } from "./Furniture3D";
 import { ProductModel } from "./ProductModel";
 import { floorTexture } from "./textures";
 
@@ -130,11 +130,13 @@ function ItemObject({
       onPointerOver={interactive ? (e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; } : undefined}
       onPointerOut={interactive ? () => { document.body.style.cursor = ""; } : undefined}
     >
+      <LookProvider appearance={c.appearance}>
       {c.modelUrl ? (
         <ProductModel url={c.modelUrl} w={item.width} d={item.depth} h={item.height} fallback={<Furniture3D kind={c.model} w={item.width} d={item.depth} h={item.height} color={item.color ?? c.colors[0]?.hex ?? "#cccccc"} evening={evening} />} />
       ) : (
         <Furniture3D kind={c.model} w={item.width} d={item.depth} h={item.height} color={item.color ?? c.colors[0]?.hex ?? "#cccccc"} evening={evening} />
       )}
+      </LookProvider>
       {(selected || error) && (
         <Line
           points={[...corners, corners[0]].map((p) => [p.x, 0.8, p.y] as [number, number, number])}

@@ -1,4 +1,5 @@
 import type { RoomType } from "@/lib/scene/types";
+import type { Appearance } from "./appearance";
 
 export const CATEGORIES = [
   { id: "sofas", label: "Sofas" },
@@ -132,6 +133,9 @@ export interface CatalogItem {
   heightEstimated?: boolean;
   /** where the dimensions came from, e.g. "feed fields", "title", "description" */
   dimsSource?: string;
+  /** how the product looks (drives 3D detail and render prompts) */
+  appearance?: Appearance;
+  appearanceSource?: "photo" | "text";
 }
 
 export const AFFILIATE_NETWORKS = ["impact", "cj", "rakuten", "awin", "shareasale", "amazon", "direct"] as const;

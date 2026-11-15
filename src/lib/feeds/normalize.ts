@@ -1,5 +1,6 @@
 import { getCatalogItem } from "@/lib/catalog/items";
 import type { AffiliateNetwork, CatalogItem } from "@/lib/catalog/types";
+import { appearanceFromText } from "@/lib/catalog/appearance";
 import { classifyProduct, DIM_RANGES, guessStyles } from "./classify";
 import { colorNameToHex } from "./colors";
 import { extractDimensions } from "./dimensions";
@@ -116,8 +117,11 @@ export function normalizeRow(row: Record<string, unknown>, src: FeedSource): Cat
   const material = get(row, ALIASES.material);
   const brand = get(row, ALIASES.brand);
 
+  const primary = hex ?? template.colors[0]?.hex ?? "#cccccc";
   return {
     ...template,
+    appearance: appearanceFromText(`${title}. ${color} ${material}. ${description}`, cls.model, primary),
+    appearanceSource: "text",
     id: retailerItemId(src.retailer, externalId),
     name: title.length > 70 ? title.slice(0, 67).trimEnd() + "…" : title,
     category: cls.category,

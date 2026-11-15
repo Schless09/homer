@@ -19,7 +19,8 @@ export function aiConfig() {
     designerEffort: effort(process.env.ANTHROPIC_DESIGNER_EFFORT, "medium"),
     visionModel: process.env.ANTHROPIC_VISION_MODEL || base,
     visionEffort: effort(process.env.ANTHROPIC_VISION_EFFORT, "medium"),
-    imageProvider: process.env.REPLICATE_API_TOKEN ? "replicate" : null,
+    imageProvider: process.env.HOMER_GEMINI_API_KEY ? "gemini" : process.env.REPLICATE_API_TOKEN ? "replicate" : null,
+    geminiImageModel: process.env.HOMER_GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image",
     replicateModel: process.env.REPLICATE_RENDER_MODEL || "black-forest-labs/flux-kontext-pro",
   };
 }

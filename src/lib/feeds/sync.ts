@@ -5,6 +5,8 @@ import { adminSupabase } from "@/lib/supabase/server";
 import { parseFeed } from "./csv";
 import { normalizeFeed, type Rejected } from "./normalize";
 import { catalogRow } from "./rows";
+import { enrichAppearance } from "./appearance-ai";
+import type { CatalogItem } from "@/lib/catalog/types";
 
 export const FeedConfigSchema = z.array(
   z.object({
@@ -31,6 +33,7 @@ export interface SyncReport {
   deactivated: number;
   rejected: number;
   sampleRejections: Rejected[];
+  photosAnalyzed?: number;
   error?: string;
 }
 
@@ -44,17 +47,25 @@ export async function syncFeed(feed: FeedConfig): Promise<SyncReport> {
     if (!res.ok) throw new Error(`feed responded ${res.status}`);
     const rows = parseFeed(await res.text(), feed.format);
     report.fetched = rows.length;
-    const { items, rejected } = normalizeFeed(rows, { retailer: feed.retailer, network: feed.network, currency: feed.currency });
+    const normalized = normalizeFeed(rows, { retailer: feed.retailer, network: feed.network, currency: feed.currency });
+    let items = normalized.items;
+    const rejected = normalized.rejected;
     report.rejected = rejected.length;
     report.sampleRejections = rejected.slice(0, 10);
+    // read new/changed product photos once; unchanged ones reuse their stored look
+    const { data: prevRows } = await sb.from("homer_furniture_catalog").select("id,item").eq("retailer", feed.retailer);
+    const existing = new Map((prevRows ?? []).filter((r) => r.item).map((r) => [r.id as string, r.item as CatalogItem]));
+    const enriched = await enrichAppearance(items, { existing });
+    items = enriched.items;
+    report.photosAnalyzed = enriched.analyzed;
     for (let i = 0; i < items.length; i += 500) {
       const { error } = await sb.from("homer_furniture_catalog").upsert(items.slice(i, i + 500).map(catalogRow), { onConflict: "id" });
       if (error) throw new Error(`upsert failed: ${error.message}`);
     }
     report.imported = items.length;
     const keep = new Set(items.map((i) => i.id));
-    const { data: existing } = await sb.from("homer_furniture_catalog").select("id").eq("retailer", feed.retailer).eq("active", true);
-    const stale = (existing ?? []).map((r) => r.id as string).filter((id) => !keep.has(id));
+    const { data: activeRows } = await sb.from("homer_furniture_catalog").select("id").eq("retailer", feed.retailer).eq("active", true);
+    const stale = (activeRows ?? []).map((r) => r.id as string).filter((id) => !keep.has(id));
     for (let i = 0; i < stale.length; i += 500) {
       await sb.from("homer_furniture_catalog").update({ active: false }).in("id", stale.slice(i, i + 500));
     }

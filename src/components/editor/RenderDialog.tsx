@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Camera, Download, Info, Loader2, Wand2 } from "lucide-react";
 import { getCatalogItem } from "@/lib/catalog/items";
 import { dataUrlToBlob, download } from "@/lib/export";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useAIStatus } from "./useAIStatus";
+import { ProductImage } from "./ProductImage";
 
 type Job = { id: string; status: string; output?: string; error?: string };
 
@@ -21,6 +22,17 @@ export function RenderDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refsUsed, setRefsUsed] = useState<string[]>([]);
+  const items = useEditor((s) => s.scene.items);
+  // real products in the room, largest first: their photos guide the render
+  const realProducts = useMemo(() => {
+    const seen = new Set<string>();
+    return [...items]
+      .sort((a, b) => b.width * b.depth - a.width * a.depth)
+      .map((i) => getCatalogItem(i.catalogId))
+      .filter((c): c is NonNullable<typeof c> => !!c && c.source === "retailer" && !seen.has(c.id) && !!seen.add(c.id))
+      .slice(0, 6);
+  }, [items]);
 
   // capture the 3D view when the dialog opens (switching to 3D if needed)
   useEffect(() => {
@@ -73,11 +85,12 @@ export function RenderDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       const r = await fetch("/api/ai/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: snapshot, prompt, style: { wallColor: sc.style.wallColor, floor: sc.style.floor }, pieces }),
+        body: JSON.stringify({ image: snapshot, prompt, style: { wallColor: sc.style.wallColor, floor: sc.style.floor }, pieces, productIds: realProducts.map((p) => p.id) }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? "Render failed");
       setJob(d.job);
+      setRefsUsed(d.referencesUsed ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Render failed");
     } finally {
@@ -128,10 +141,22 @@ export function RenderDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-[13px] text-muted-foreground">
                   <Info className="size-5" />
                   Photorealistic rendering isn&apos;t configured on this deployment.
-                  <span className="text-[11px]">Set REPLICATE_API_TOKEN on the server to enable it.</span>
+                  <span className="text-[11px]">Set HOMER_GEMINI_API_KEY on the server to enable it (product photos are used as references).</span>
                 </div>
               )}
             </div>
+            {realProducts.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground" data-testid="render-products">
+                <span>{status?.imageProvider === "gemini" ? "Matching real products:" : "Described in the prompt:"}</span>
+                {realProducts.map((p) => (
+                  <span key={p.id} className="flex items-center gap-1 rounded-full border bg-card py-0.5 pr-2 pl-0.5">
+                    <ProductImage item={p} size={18} className="rounded-full" />
+                    {p.name.length > 22 ? p.name.slice(0, 21) + "…" : p.name}
+                  </span>
+                ))}
+              </div>
+            )}
+            {job?.status === "succeeded" && refsUsed.length > 0 && <p className="text-[11px] text-muted-foreground">Rendered with {refsUsed.length} product photo(s) as reference.</p>}
             <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Optional direction, e.g. warm evening light, linen curtains, a few books on the shelf" rows={2} disabled={!configured} />
             {error && <p className="text-[12px] text-destructive">{error}</p>}
             {job?.status === "failed" && <p className="text-[12px] text-destructive">{job.error ?? "The render failed."}</p>}

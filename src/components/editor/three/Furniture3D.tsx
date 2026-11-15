@@ -1,84 +1,278 @@
 "use client";
 
-import { memo } from "react";
+import { createContext, memo, useContext, useMemo } from "react";
 import { RoundedBox } from "@react-three/drei";
 import type { ModelKind } from "@/lib/catalog/types";
+import { isFabric, type Appearance, type MaterialKind } from "@/lib/catalog/appearance";
+import { Surface, rugTexture } from "./materials";
 
 /**
  * Procedural furniture, built in inches. Local frame: x = width, y = up,
  * z = depth with the front of the piece facing +z (plan +y).
+ *
+ * A product's Appearance (from its photo or description) switches materials,
+ * legs, arms, backs, tufting and patterns, so retailer products read as the
+ * actual piece. Built-in samples use the defaults below.
  */
 
 const LEG = "#3b2c22";
 const METAL = "#2a2a2a";
 const WHITE = "#f4f2ee";
 
-type Mat = "fabric" | "wood" | "metal" | "ceramic" | "stone" | "plastic" | "glass";
-const ROUGH: Record<Mat, { roughness: number; metalness: number }> = {
-  fabric: { roughness: 0.95, metalness: 0 },
-  wood: { roughness: 0.62, metalness: 0 },
-  metal: { roughness: 0.38, metalness: 0.35 },
-  ceramic: { roughness: 0.25, metalness: 0 },
-  stone: { roughness: 0.3, metalness: 0 },
-  plastic: { roughness: 0.5, metalness: 0 },
-  glass: { roughness: 0.05, metalness: 0.1 },
+type Mat = "fabric" | "wood" | "metal" | "ceramic" | "stone" | "plastic" | "glass" | "leg";
+
+interface Look {
+  fabric: MaterialKind;
+  body: MaterialKind;
+  frame: MaterialKind;
+  legStyle: Appearance["legStyle"] | "default";
+  legColor: string | null;
+  arm: NonNullable<Appearance["armStyle"]>;
+  back: NonNullable<Appearance["backStyle"]> | null;
+  cushions: number | null;
+  tufting: Appearance["tufting"];
+  silhouette: Appearance["silhouette"];
+  pattern: Appearance["pattern"];
+  upholstered: boolean;
+  secondary: string | null;
+  finish: Appearance["finish"];
+}
+
+const DEFAULT_LOOK: Look = {
+  fabric: "cotton",
+  body: "wood",
+  frame: "wood",
+  legStyle: "default",
+  legColor: null,
+  arm: "track",
+  back: null,
+  cushions: null,
+  tufting: "none",
+  silhouette: "boxy",
+  pattern: "solid",
+  upholstered: false,
+  secondary: null,
+  finish: "matte",
 };
 
+const LookCtx = createContext<Look>(DEFAULT_LOOK);
+
+function lookFrom(a: Appearance | undefined): Look {
+  if (!a) return DEFAULT_LOOK;
+  const fabric = isFabric(a.material) ? a.material : a.material === "rattan" ? "rattan" : "cotton";
+  return {
+    fabric,
+    body: isFabric(a.material) ? (a.frameMaterial && !isFabric(a.frameMaterial) ? a.frameMaterial : "wood") : a.material,
+    frame: a.frameMaterial && !isFabric(a.frameMaterial) ? a.frameMaterial : "wood",
+    legStyle: a.legStyle,
+    legColor: a.legColor,
+    arm: a.armStyle ?? "track",
+    back: a.backStyle,
+    cushions: a.seatCushions,
+    tufting: a.tufting,
+    silhouette: a.silhouette,
+    pattern: a.pattern,
+    upholstered: isFabric(a.material),
+    secondary: a.secondaryColor,
+    finish: a.finish,
+  };
+}
+
+function resolve(mat: Mat, look: Look): MaterialKind {
+  switch (mat) {
+    case "fabric":
+      return look.fabric;
+    case "wood":
+      return look.body;
+    case "leg":
+      return look.frame;
+    case "stone":
+      return "marble";
+    default:
+      return mat;
+  }
+}
+
 function M({ color, mat = "wood", emissive, opacity }: { color: string; mat?: Mat; emissive?: string; opacity?: number }) {
-  const r = ROUGH[mat];
-  return (
-    <meshStandardMaterial
-      color={color}
-      roughness={r.roughness}
-      metalness={r.metalness}
-      emissive={emissive ?? "#000000"}
-      emissiveIntensity={emissive ? 1.4 : 0}
-      transparent={opacity !== undefined}
-      opacity={opacity ?? 1}
-    />
-  );
+  const look = useContext(LookCtx);
+  return <Surface kind={resolve(mat, look)} color={color} finish={mat === "wood" || mat === "fabric" ? look.finish : undefined} emissive={emissive} opacity={opacity} />;
 }
 
 /** Box positioned by its center. */
-function B({ w, h, d, x = 0, y = 0, z = 0, color, mat, r }: { w: number; h: number; d: number; x?: number; y?: number; z?: number; color: string; mat?: Mat; r?: number }) {
-  if (r) {
+function B({ w, h, d, x = 0, y = 0, z = 0, color, mat, r, rx = 0, rz = 0 }: { w: number; h: number; d: number; x?: number; y?: number; z?: number; color: string; mat?: Mat; r?: number; rx?: number; rz?: number }) {
+  const look = useContext(LookCtx);
+  const radius = r && look.silhouette === "rounded" && mat === "fabric" ? r * 1.8 : r;
+  if (radius) {
     return (
-      <RoundedBox args={[w, h, d]} radius={Math.min(r, w / 2, h / 2, d / 2) * 0.999} smoothness={3} position={[x, y, z]} castShadow receiveShadow>
+      <RoundedBox args={[w, h, d]} radius={Math.min(radius, w / 2, h / 2, d / 2) * 0.999} smoothness={3} position={[x, y, z]} rotation={[rx, 0, rz]} castShadow receiveShadow>
         <M color={color} mat={mat} />
       </RoundedBox>
     );
   }
   return (
-    <mesh position={[x, y, z]} castShadow receiveShadow>
+    <mesh position={[x, y, z]} rotation={[rx, 0, rz]} castShadow receiveShadow>
       <boxGeometry args={[w, h, d]} />
       <M color={color} mat={mat} />
     </mesh>
   );
 }
 
-function Cyl({ rt, rb, h, x = 0, y = 0, z = 0, color, mat, seg = 28 }: { rt: number; rb?: number; h: number; x?: number; y?: number; z?: number; color: string; mat?: Mat; seg?: number }) {
+function Cyl({ rt, rb, h, x = 0, y = 0, z = 0, color, mat, seg = 28, rx = 0, rz = 0 }: { rt: number; rb?: number; h: number; x?: number; y?: number; z?: number; color: string; mat?: Mat; seg?: number; rx?: number; rz?: number }) {
   return (
-    <mesh position={[x, y, z]} castShadow receiveShadow>
+    <mesh position={[x, y, z]} rotation={[rx, 0, rz]} castShadow receiveShadow>
       <cylinderGeometry args={[rt, rb ?? rt, h, seg]} />
       <M color={color} mat={mat} />
     </mesh>
   );
 }
 
-function Legs({ w, d, h, inset = 2, r = 0.8, color = LEG, round = true }: { w: number; d: number; h: number; inset?: number; r?: number; color?: string; round?: boolean }) {
+/** Four legs (or a base) in the product's leg style. */
+function Legs({ w, d, h, inset = 2, r = 0.8, color, round = true }: { w: number; d: number; h: number; inset?: number; r?: number; color?: string; round?: boolean }) {
+  const look = useContext(LookCtx);
+  const c = look.legColor ?? color ?? LEG;
+  const style = look.legStyle === "default" ? (round ? "tapered" : "block") : look.legStyle;
   const pts = [
     [-w / 2 + inset, -d / 2 + inset],
     [w / 2 - inset, -d / 2 + inset],
     [-w / 2 + inset, d / 2 - inset],
     [w / 2 - inset, d / 2 - inset],
   ];
-  return (
-    <>
-      {pts.map(([x, z], i) =>
-        round ? <Cyl key={i} rt={r} rb={r * 0.7} h={h} x={x} y={h / 2} z={z} color={color} seg={10} /> : <B key={i} w={r * 2} h={h} d={r * 2} x={x} y={h / 2} z={z} color={color} />,
-      )}
-    </>
+  if (h <= 0.2 || style === "none") return null;
+  switch (style) {
+    case "plinth":
+      return <B w={w - inset * 2} h={h} d={d - inset * 2} y={h / 2} color={c} mat="leg" />;
+    case "sled":
+      return (
+        <>
+          {[-1, 1].map((sx) => (
+            <group key={sx}>
+              <B w={0.8} h={0.8} d={d - inset * 2} x={sx * (w / 2 - inset)} y={0.4} color={c} mat="leg" />
+              <B w={0.8} h={h} d={0.8} x={sx * (w / 2 - inset)} y={h / 2} z={-d / 2 + inset} color={c} mat="leg" />
+              <B w={0.8} h={h} d={0.8} x={sx * (w / 2 - inset)} y={h / 2} z={d / 2 - inset} color={c} mat="leg" />
+            </group>
+          ))}
+        </>
+      );
+    case "pedestal":
+      return (
+        <>
+          <Cyl rt={Math.min(w, d) * 0.08} rb={Math.min(w, d) * 0.12} h={h} y={h / 2} color={c} mat="leg" />
+          <Cyl rt={Math.min(w, d) * 0.28} h={1} y={0.5} color={c} mat="leg" />
+        </>
+      );
+    case "x-base":
+      return (
+        <>
+          {[-1, 1].map((sx) => (
+            <group key={sx} position={[sx * (w / 2 - inset - 2), 0, 0]}>
+              <B w={1.2} h={Math.hypot(h, d * 0.8)} d={1.6} y={h / 2} color={c} mat="leg" rx={Math.atan2(d * 0.8, h)} />
+              <B w={1.2} h={Math.hypot(h, d * 0.8)} d={1.6} y={h / 2} color={c} mat="leg" rx={-Math.atan2(d * 0.8, h)} />
+            </group>
+          ))}
+          <B w={w - inset * 2 - 4} h={1.2} d={1.2} y={h * 0.5} color={c} mat="leg" />
+        </>
+      );
+    case "caster":
+      return (
+        <>
+          {pts.map(([x, z], i) => (
+            <mesh key={i} position={[x, Math.min(h, 2) / 2, z]}>
+              <sphereGeometry args={[Math.min(h, 2) / 2, 10, 8]} />
+              <M color="#222222" mat="plastic" />
+            </mesh>
+          ))}
+        </>
+      );
+    case "hairpin":
+      return (
+        <>
+          {pts.map(([x, z], i) => (
+            <group key={i} position={[x, 0, z]}>
+              <Cyl rt={0.22} h={h} x={-0.8} y={h / 2} color={c} mat="leg" seg={6} rz={0.12} />
+              <Cyl rt={0.22} h={h} x={0.8} y={h / 2} color={c} mat="leg" seg={6} rz={-0.12} />
+            </group>
+          ))}
+        </>
+      );
+    default: {
+      const rr = style === "slim-metal" ? 0.35 : style === "block" ? r * 1.4 : r;
+      return (
+        <>
+          {pts.map(([x, z], i) =>
+            style === "block" ? (
+              <B key={i} w={rr * 2} h={h} d={rr * 2} x={x} y={h / 2} z={z} color={c} mat="leg" />
+            ) : style === "turned" ? (
+              <group key={i}>
+                <Cyl rt={rr * 0.8} rb={rr * 0.6} h={h} x={x} y={h / 2} z={z} color={c} mat="leg" seg={12} />
+                <mesh position={[x, h * 0.55, z]}>
+                  <sphereGeometry args={[rr * 1.15, 12, 8]} />
+                  <M color={c} mat="leg" />
+                </mesh>
+              </group>
+            ) : (
+              <Cyl key={i} rt={rr} rb={style === "tapered" ? rr * 0.55 : rr} h={h} x={x} y={h / 2} z={z} color={c} mat="leg" seg={10} />
+            ),
+          )}
+        </>
+      );
+    }
+  }
+}
+
+/** Button tufting or channel grooves on a flat upholstered face (front faces +z). */
+function Tufting({ w, h, x = 0, y, z }: { w: number; h: number; x?: number; y: number; z: number }) {
+  const look = useContext(LookCtx);
+  if (look.tufting === "button") {
+    const cols = Math.max(2, Math.round(w / 9));
+    const rows = Math.max(1, Math.round(h / 8));
+    const out: React.ReactNode[] = [];
+    for (let i = 0; i < cols; i++)
+      for (let j = 0; j < rows; j++)
+        out.push(
+          <mesh key={`${i}-${j}`} position={[x - w / 2 + (w / cols) * (i + 0.5) + (j % 2 ? w / cols / 2 : 0) * 0, y - h / 2 + (h / rows) * (j + 0.5), z]}>
+            <sphereGeometry args={[0.55, 8, 6]} />
+            <meshStandardMaterial color="#000000" transparent opacity={0.35} />
+          </mesh>,
+        );
+    return <>{out}</>;
+  }
+  if (look.tufting === "channel") {
+    const n = Math.max(3, Math.round(w / 7));
+    return (
+      <>
+        {Array.from({ length: n - 1 }).map((_, i) => (
+          <mesh key={i} position={[x - w / 2 + (w / n) * (i + 1), y, z]}>
+            <boxGeometry args={[0.35, h * 0.92, 0.3]} />
+            <meshStandardMaterial color="#000000" transparent opacity={0.3} />
+          </mesh>
+        ))}
+      </>
+    );
+  }
+  return null;
+}
+
+function Rug({ w, d, color, round }: { w: number; d: number; color: string; round: boolean }) {
+  const look = useContext(LookCtx);
+  const map = useMemo(() => rugTexture(look.pattern, color, look.secondary), [look.pattern, look.secondary, color]);
+  const mat = map ? <meshStandardMaterial map={map} roughness={1} /> : <M color={color} mat="fabric" />;
+  return round ? (
+    <mesh position={[0, 0.25, 0]} receiveShadow>
+      <cylinderGeometry args={[w / 2, w / 2, 0.5, 48]} />
+      {mat}
+    </mesh>
+  ) : (
+    <mesh position={[0, 0.25, 0]} receiveShadow>
+      <boxGeometry args={[w, 0.5, d]} />
+      {mat}
+    </mesh>
   );
+}
+
+/** Wrap a piece so its parts pick up the product's look. */
+export function LookProvider({ appearance, children }: { appearance?: Appearance; children: React.ReactNode }) {
+  const look = useMemo(() => lookFrom(appearance), [appearance]);
+  return <LookCtx.Provider value={look}>{children}</LookCtx.Provider>;
 }
 
 interface Props {
@@ -91,26 +285,87 @@ interface Props {
   evening?: boolean;
 }
 
-function SofaBody({ w, d, h, color, seats, arms = true }: { w: number; d: number; h: number; color: string; seats: number; arms?: boolean }) {
-  const legH = 4;
-  const baseH = 11;
-  const arm = arms ? Math.min(7, w * 0.12) : 0;
-  const backD = Math.min(9, d * 0.27);
-  const seatW = (w - arm * 2) / seats;
+function SofaArm({ x, w, h, d, y0, color, side }: { x: number; w: number; h: number; d: number; y0: number; color: string; side: -1 | 1 }) {
+  const look = useContext(LookCtx);
+  switch (look.arm) {
+    case "none":
+      return null;
+    case "rolled":
+      return (
+        <group>
+          <B w={w * 0.8} h={h - w * 0.5} d={d} x={x - side * w * 0.1} y={y0 + (h - w * 0.5) / 2} color={color} mat="fabric" r={1.5} />
+          <Cyl rt={w * 0.55} h={d} x={x} y={y0 + h - w * 0.55} color={color} mat="fabric" rx={Math.PI / 2} />
+        </group>
+      );
+    case "slope":
+      return (
+        <group>
+          <B w={w} h={h * 0.75} d={d} x={x} y={y0 + (h * 0.75) / 2} color={color} mat="fabric" r={2} />
+          <B w={w} h={h * 0.3} d={d * 0.55} x={x} y={y0 + h * 0.75 + h * 0.1} z={-d * 0.22} color={color} mat="fabric" r={2} />
+        </group>
+      );
+    case "flared":
+      return <B w={w} h={h} d={d} x={x + side * 0.8} y={y0 + h / 2} color={color} mat="fabric" r={2.4} rz={side * 0.09} />;
+    case "rounded":
+      return <B w={w * 1.15} h={h} d={d} x={x} y={y0 + h / 2} color={color} mat="fabric" r={Math.min(w, h) * 0.5} />;
+    default:
+      return <B w={w} h={h} d={d} x={x} y={y0 + h / 2} color={color} mat="fabric" r={2.4} />;
+  }
+}
+
+function SofaBack({ w, h, d, y0, z, color }: { w: number; h: number; d: number; y0: number; z: number; color: string }) {
+  const look = useContext(LookCtx);
+  const back = look.back ?? "tight";
+  const bh = back === "low" ? h * 0.7 : back === "high" || back === "wingback" ? h * 1.15 : h;
+  if (back === "loose-cushions") {
+    const n = look.cushions ?? (w > 70 ? 3 : 2);
+    const cw = w / n;
+    return (
+      <group>
+        <B w={w} h={bh * 0.55} d={d * 0.55} y={y0 + (bh * 0.55) / 2} z={z - d * 0.22} color={color} mat="fabric" r={1.5} />
+        {Array.from({ length: n }).map((_, i) => (
+          <B key={i} w={cw - 0.8} h={bh * 0.92} d={d * 0.75} x={-w / 2 + cw * (i + 0.5)} y={y0 + bh * 0.46} z={z + d * 0.1} color={color} mat="fabric" r={3} rx={-0.12} />
+        ))}
+      </group>
+    );
+  }
   return (
     <group>
-      <Legs w={w} d={d} h={legH} inset={3} r={0.9} />
-      <B w={w} h={baseH} d={d} y={legH + baseH / 2} color={color} mat="fabric" r={1.5} />
-      {Array.from({ length: seats }).map((_, i) => (
-        <B key={i} w={seatW - 0.6} h={5} d={d - backD - 1} x={-w / 2 + arm + seatW * (i + 0.5)} y={legH + baseH + 2.5} z={backD / 2} color={color} mat="fabric" r={2.2} />
-      ))}
-      <B w={w - arm * 2} h={h - legH - baseH} d={backD} y={legH + baseH + (h - legH - baseH) / 2} z={-d / 2 + backD / 2} color={color} mat="fabric" r={2.5} />
-      {arms && (
+      <B w={w} h={bh} d={d} y={y0 + bh / 2} z={z} color={color} mat="fabric" r={2.5} />
+      <Tufting w={w * 0.9} h={bh * 0.8} y={y0 + bh / 2} z={z + d / 2 + 0.05} />
+      {back === "wingback" && (
         <>
-          <B w={arm} h={h * 0.72 - legH} d={d} x={-w / 2 + arm / 2} y={legH + (h * 0.72 - legH) / 2} color={color} mat="fabric" r={2.4} />
-          <B w={arm} h={h * 0.72 - legH} d={d} x={w / 2 - arm / 2} y={legH + (h * 0.72 - legH) / 2} color={color} mat="fabric" r={2.4} />
+          <B w={3} h={bh * 0.6} d={d * 2.2} x={-w / 2 + 1.5} y={y0 + bh * 0.68} z={z + d * 0.8} color={color} mat="fabric" r={1.4} />
+          <B w={3} h={bh * 0.6} d={d * 2.2} x={w / 2 - 1.5} y={y0 + bh * 0.68} z={z + d * 0.8} color={color} mat="fabric" r={1.4} />
         </>
       )}
+    </group>
+  );
+}
+
+function SofaBody({ w, d, h, color, seats }: { w: number; d: number; h: number; color: string; seats: number }) {
+  const look = useContext(LookCtx);
+  const legH = look.legStyle === "plinth" ? 3 : look.legStyle === "none" ? 0 : 5;
+  const baseH = look.legStyle === "none" ? 13 : 10;
+  const arm = look.arm === "none" ? 0 : Math.min(look.arm === "rolled" ? 8 : 7, w * 0.12);
+  const backD = Math.min(9, d * 0.27);
+  const n = look.cushions ?? seats;
+  const seatW = (w - arm * 2) / Math.max(1, n);
+  const armH = h * 0.72 - legH;
+  return (
+    <group>
+      <Legs w={w - 2} d={d - 2} h={legH} inset={3} r={0.9} />
+      <B w={w} h={baseH} d={d} y={legH + baseH / 2} color={color} mat="fabric" r={1.5} />
+      {n === 0 ? (
+        <B w={w - arm * 2 - 0.6} h={4} d={d - backD - 1} y={legH + baseH + 2} z={backD / 2} color={color} mat="fabric" r={2} />
+      ) : (
+        Array.from({ length: n }).map((_, i) => (
+          <B key={i} w={seatW - 0.6} h={5} d={d - backD - 1} x={-w / 2 + arm + seatW * (i + 0.5)} y={legH + baseH + 2.5} z={backD / 2} color={color} mat="fabric" r={2.2} />
+        ))
+      )}
+      <SofaBack w={w - arm * 2} h={h - legH - baseH} d={backD} y0={legH + baseH} z={-d / 2 + backD / 2} color={color} />
+      <SofaArm x={-w / 2 + arm / 2} w={arm} h={armH} d={d} y0={legH} color={color} side={-1} />
+      <SofaArm x={w / 2 - arm / 2} w={arm} h={armH} d={d} y0={legH} color={color} side={1} />
     </group>
   );
 }
@@ -129,26 +384,44 @@ function Drawers({ w, h, d, y0, rows, cols, color }: { w: number; h: number; d: 
 }
 
 export const Furniture3D = memo(function Furniture3D({ kind, w, d, h, color, evening }: Props) {
+  const look = useContext(LookCtx);
   switch (kind) {
     case "bed": {
-      const baseH = 12;
+      const legH = look.legStyle === "default" || look.legStyle === "plinth" || look.legStyle === "none" ? 0 : 6;
+      const baseH = 12 - legH * 0.5;
       const mattressH = 9;
+      const top = legH + baseH;
       const headH = Math.max(h, 30);
+      const frameMat: Mat = look.upholstered ? "fabric" : "wood";
+      const back = look.back;
       return (
         <group>
-          <B w={w} h={baseH} d={d} y={baseH / 2} color={color} r={1} />
-          <B w={w - 3} h={mattressH} d={d - 6} y={baseH + mattressH / 2} z={1.5} color="#fbfaf7" mat="fabric" r={3} />
-          <B w={w - 2} h={2.2} d={d * 0.62} y={baseH + mattressH + 0.6} z={d * 0.19} color="#ece6dc" mat="fabric" r={1} />
-          <B w={w - 1} h={3} d={14} y={baseH + mattressH + 1} z={d * 0.19 - d * 0.31 + 7} color="#e3dbcf" mat="fabric" r={1.4} />
+          <Legs w={w - 2} d={d - 2} h={legH} inset={3} r={1.1} />
+          <B w={w} h={baseH} d={d} y={legH + baseH / 2} color={color} mat={frameMat} r={look.upholstered ? 2 : 1} />
+          <B w={w - 3} h={mattressH} d={d - 6} y={top + mattressH / 2} z={1.5} color="#fbfaf7" mat="fabric" r={3} />
+          <B w={w - 2} h={2.2} d={d * 0.62} y={top + mattressH + 0.6} z={d * 0.19} color="#ece6dc" mat="fabric" r={1} />
+          <B w={w - 1} h={3} d={14} y={top + mattressH + 1} z={d * 0.19 - d * 0.31 + 7} color="#e3dbcf" mat="fabric" r={1.4} />
           {w > 50 ? (
             <>
-              <B w={w / 2 - 5} h={5} d={13} x={-w / 4 + 0.5} y={baseH + mattressH + 2.5} z={-d / 2 + 13} color="#ffffff" mat="fabric" r={2.5} />
-              <B w={w / 2 - 5} h={5} d={13} x={w / 4 - 0.5} y={baseH + mattressH + 2.5} z={-d / 2 + 13} color="#ffffff" mat="fabric" r={2.5} />
+              <B w={w / 2 - 5} h={5} d={13} x={-w / 4 + 0.5} y={top + mattressH + 2.5} z={-d / 2 + 13} color="#ffffff" mat="fabric" r={2.5} />
+              <B w={w / 2 - 5} h={5} d={13} x={w / 4 - 0.5} y={top + mattressH + 2.5} z={-d / 2 + 13} color="#ffffff" mat="fabric" r={2.5} />
             </>
           ) : (
-            <B w={w - 10} h={5} d={13} y={baseH + mattressH + 2.5} z={-d / 2 + 13} color="#ffffff" mat="fabric" r={2.5} />
+            <B w={w - 10} h={5} d={13} y={top + mattressH + 2.5} z={-d / 2 + 13} color="#ffffff" mat="fabric" r={2.5} />
           )}
-          <B w={w} h={headH} d={3} y={headH / 2} z={-d / 2 + 1.5} color={color} r={1} />
+          {back === "slatted" ? (
+            <group>
+              <B w={w} h={2} d={2.5} y={headH - 1} z={-d / 2 + 1.5} color={color} mat={frameMat} />
+              {Array.from({ length: Math.round(w / 7) }).map((_, i, arr) => (
+                <B key={i} w={2.2} h={headH - top} d={1.6} x={-w / 2 + (w / arr.length) * (i + 0.5)} y={top + (headH - top) / 2} z={-d / 2 + 1.5} color={color} mat={frameMat} />
+              ))}
+            </group>
+          ) : (
+            <>
+              <B w={w} h={headH} d={look.upholstered ? 4 : 3} y={headH / 2} z={-d / 2 + 1.5} color={color} mat={frameMat} r={look.upholstered ? 2 : 1} />
+              <Tufting w={w * 0.9} h={(headH - top - mattressH) * 0.85} y={top + mattressH + (headH - top - mattressH) / 2} z={-d / 2 + 3.6} />
+            </>
+          )}
         </group>
       );
     }
@@ -350,14 +623,8 @@ export const Furniture3D = memo(function Furniture3D({ kind, w, d, h, color, eve
         </group>
       );
     case "rug":
-      return (
-        <mesh position={[0, 0.25, 0]} receiveShadow>
-          <boxGeometry args={[w, 0.5, d]} />
-          <M color={color} mat="fabric" />
-        </mesh>
-      );
     case "round-rug":
-      return <Cyl rt={w / 2} h={0.5} y={0.25} color={color} mat="fabric" seg={48} />;
+      return <Rug w={w} d={d} color={color} round={kind === "round-rug"} />;
     case "floor-lamp":
       return (
         <group>
