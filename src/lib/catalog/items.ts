@@ -154,9 +154,40 @@ export const CATALOG: CatalogItem[] = [
 ];
 
 const BY_ID = new Map(CATALOG.map((c) => [c.id, c]));
+let version = 0;
+const listeners = new Set<() => void>();
 
 export function getCatalogItem(id: string): CatalogItem | undefined {
   return BY_ID.get(id);
+}
+
+/**
+ * Add or refresh retailer products at runtime (browser and server). CATALOG is
+ * mutated in place so every consumer (search, solver, AI, editor) sees them.
+ */
+export function registerCatalogItems(items: CatalogItem[]) {
+  let changed = false;
+  for (const item of items) {
+    const prev = BY_ID.get(item.id);
+    if (prev?.source === "sample") continue; // never let a feed shadow a built-in id
+    if (prev) CATALOG.splice(CATALOG.indexOf(prev), 1, item);
+    else CATALOG.push(item);
+    BY_ID.set(item.id, item);
+    changed = true;
+  }
+  if (changed) {
+    version++;
+    listeners.forEach((l) => l());
+  }
+}
+
+export function catalogVersion() {
+  return version;
+}
+
+export function subscribeCatalog(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
 }
 
 export function requireCatalogItem(id: string): CatalogItem {
@@ -165,5 +196,4 @@ export function requireCatalogItem(id: string): CatalogItem {
   return c;
 }
 
-export const FURNITURE = CATALOG.filter((c) => !c.fixture);
 export const FIXTURES = CATALOG.filter((c) => c.fixture);

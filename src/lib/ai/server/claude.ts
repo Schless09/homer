@@ -20,7 +20,8 @@ const SYSTEM = `You are Homer, an expert interior designer and space planner emb
 You work on a canonical scene model measured in INCHES. Coordinates: x grows east (right), y grows south (down). Rotation is degrees clockwise; at rotation 0 a piece's front faces south (+y) and its back faces north (-y). Rotation 90 → front faces west, 180 → front faces north, 270 → front faces east. Item x/y is the CENTER of its footprint; width runs along the item's local x axis, depth along its local y axis.
 
 Ground rules:
-- Use only furniture from the catalog (look it up with search_catalog). Never invent products, prices, or dimensions. Prices are sample estimates; say so when you quote totals.
+- Use only furniture from the catalog (look it up with search_catalog). Never invent products, prices, or dimensions.
+- Prefer real products (purchasable: true, in_stock: true) whenever one suits the request and fits; name the retailer. Items with purchasable: false are sample placeholders with estimated prices: say so when you quote totals that include them.
 - Never change walls, doors, windows, rooms or fixed fixtures. Items marked "fixed" are part of the floor plan; items marked "locked" were locked by the user. Leave both alone.
 - Prefer auto_layout to furnish whole rooms or apartments: its solver uses true dimensions and guarantees no collisions, clear door swings and recommended walkways. Use apply_changes for targeted edits (move, rotate, swap, recolor, add one piece).
 - After changes, read the returned issues. If a change you made causes an error or clearance warning, fix it before finishing, or explain the trade-off.
@@ -174,10 +175,27 @@ function runTool(name: string, input: unknown, w: Working): { content: string; i
         maxPrice: p.data.max_price,
         maxWidth: p.data.max_width,
         maxDepth: p.data.max_depth,
-      }).slice(0, 25);
+      })
+        // real, in-stock products first; samples are planning placeholders
+        .sort((a, b) => Number(b.source === "retailer" && b.inStock !== false) - Number(a.source === "retailer" && a.inStock !== false))
+        .slice(0, 25);
       return {
         content: JSON.stringify(
-          results.map((c) => ({ id: c.id, name: c.name, category: c.category, width: c.width, depth: c.depth, height: c.height, sample_price: c.price, styles: c.styles, finishes: c.colors.map((x) => `${x.name} ${x.hex}`), materials: c.materials })),
+          results.map((c) => ({
+            id: c.id,
+            name: c.name,
+            category: c.category,
+            width: c.width,
+            depth: c.depth,
+            height: c.height,
+            price: c.price,
+            purchasable: c.source === "retailer",
+            retailer: c.retailer,
+            in_stock: c.source === "retailer" ? c.inStock !== false : undefined,
+            styles: c.styles,
+            finishes: c.colors.map((x) => `${x.name} ${x.hex}`),
+            materials: c.materials,
+          })),
         ),
       };
     }

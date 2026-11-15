@@ -196,6 +196,31 @@ function fitBudget(wishes: Wish[], budget: number): { wishes: Wish[]; dropped: s
   return { wishes: ws, dropped };
 }
 
+/** Swap each wish for a real, in-stock product of the same type and similar size when one exists. */
+function preferRetail(wishes: Wish[], budget?: number): Wish[] {
+  return wishes.map((w) => {
+    const c = getCatalogItem(w.catalogId);
+    if (!c || c.source === "retailer") return w;
+    const options = CATALOG.filter(
+      (x) =>
+        x.source === "retailer" &&
+        x.inStock !== false &&
+        x.model === c.model &&
+        Math.abs(x.width - c.width) <= c.width * 0.18 &&
+        Math.abs(x.depth - c.depth) <= Math.max(6, c.depth * 0.25) &&
+        (budget === undefined || x.price <= c.price * 1.15),
+    ).sort((a, b) => Math.abs(a.width - c.width) - Math.abs(b.width - c.width));
+    return options[0] ? { ...w, catalogId: options[0].id } : w;
+  });
+}
+
+function retailNote(ws: Wish[]): string | null {
+  const real = ws.filter((w) => getCatalogItem(w.catalogId)?.source === "retailer");
+  if (!real.length) return null;
+  const retailers = [...new Set(real.map((w) => getCatalogItem(w.catalogId)!.retailer))].join(", ");
+  return `${real.length} of these are real products you can buy (${retailers}); select one and use "View & buy".`;
+}
+
 const toRequests = (ws: Wish[]): PlacementRequest[] => ws.map((w) => ({ catalogId: w.catalogId, quantity: w.quantity }));
 
 function existingRequests(scene: Scene): PlacementRequest[] {
@@ -222,7 +247,33 @@ function layoutResponse(
   wishes: Wish[],
   opts: { palette?: Palette; strategy: Strategy; keepExisting: boolean; budget?: number; dropped?: string[]; intro?: string },
 ): DesignResponse {
-  const res = solveLayout(scene, toRequests(wishes), { strategy: opts.strategy, keepExisting: opts.keepExisting, palette: opts.palette, seed: 17 });
+  // try real products; keep them only if the layout fits as well as with the sample pieces
+  const solve = (ws: Wish[]) => {
+    const r = solveLayout(scene, toRequests(ws), { strategy: opts.strategy, keepExisting: opts.keepExisting, palette: opts.palette, seed: 17 });
+    const sc = { ...scene, items: r.items };
+    return { r, cost: r.failed.length * 100 + validateScene(sc).filter((i) => i.severity !== "info").length };
+  };
+  const retail = preferRetail(wishes, opts.budget);
+  let chosen = solve(wishes);
+  if (retail.some((w, i) => w.catalogId !== wishes[i].catalogId)) {
+    const withRetail = solve(retail);
+    if (withRetail.cost <= chosen.cost) {
+      chosen = withRetail;
+      wishes = retail;
+    } else {
+      // keep real products one by one where they don't hurt the fit
+      for (let i = 0; i < retail.length; i++) {
+        if (retail[i].catalogId === wishes[i].catalogId) continue;
+        const trial = wishes.map((w, j) => (j === i ? retail[i] : w));
+        const t = solve(trial);
+        if (t.cost <= chosen.cost) {
+          chosen = t;
+          wishes = trial;
+        }
+      }
+    }
+  }
+  const res = chosen.r;
   const actions: DesignAction[] = [{ action: "set_layout", items: res.items }];
   if (opts.palette) {
     actions.push({ action: "set_wall_color", color: opts.palette.wallColor }, { action: "set_floor", material: opts.palette.floor });
@@ -233,7 +284,7 @@ function layoutResponse(
   lines.push(opts.intro ?? `Here's a ${opts.palette ? opts.palette.name.toLowerCase() + " " : ""}layout using ${res.added.length} pieces from the catalog, all at their real dimensions.`);
   const hl = highlights(next, res.added);
   if (hl.length) lines.push("", ...hl);
-  lines.push("", `${Math.round(m.openPct * 100)}% of the ${formatSqft(m.totalArea)} stays open floor. Estimated total ${formatPrice(m.totalPrice)} (sample prices).`);
+  lines.push("", `${Math.round(m.openPct * 100)}% of the ${formatSqft(m.totalArea)} stays open floor. Estimated total ${formatPrice(m.totalPrice)}${wishes.every((w) => getCatalogItem(w.catalogId)?.source === "retailer") ? "" : wishes.some((w) => getCatalogItem(w.catalogId)?.source === "retailer") ? " (includes sample prices for placeholder pieces)" : " (sample prices)"}.`);
   if (opts.budget !== undefined) {
     lines.push(m.totalPrice <= opts.budget ? `That's within your ${formatPrice(opts.budget)} budget.` : `That's still ${formatPrice(m.totalPrice - opts.budget)} over your ${formatPrice(opts.budget)} budget with the most affordable options I have.`);
     if (opts.dropped?.length) lines.push(`To stay on budget I left out: ${opts.dropped.join(", ")}.`);
@@ -242,6 +293,8 @@ function layoutResponse(
     lines.push(`⚠ ${f.reason}${f.suggestion ? ` A ${f.suggestion.name} (${formatFtIn(f.suggestion.width)} wide) would fit.` : ""}`);
   }
   if (m.warnings + m.errors > 0) lines.push(`I flagged ${m.warnings + m.errors} spacing note(s) in the Space check panel.`);
+  const note = retailNote(wishes);
+  if (note) lines.push(note);
   lines.push("", "Review the preview, then accept or discard it. You can drag anything afterward.");
   return { provider: "demo", message: lines.join("\n"), title: opts.palette ? `${opts.palette.name} layout` : "New layout", actions };
 }
@@ -266,7 +319,7 @@ export function runDemoDesigner(req: DesignRequest): DesignResponse {
   if (has(t, "three layout", "3 layout", "alternatives", "options", "different layout", "compare", "variations")) {
     const wishes = parseWishes(t, scene);
     const base = wishes.length ? complement(wishes, scene) : furnished ? null : defaultWishes(scene);
-    const requests = base ? toRequests(base) : existingRequests(scene);
+    const requests = base ? toRequests(preferRetail(base)) : existingRequests(scene);
     const alts = generateAlternatives(scene, requests, { palette, keepExisting: false });
     const lines = [
       `I generated three layouts with the same ${requests.reduce((s, r) => s + (r.quantity ?? 1), 0)} pieces:`,

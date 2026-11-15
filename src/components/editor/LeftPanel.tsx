@@ -34,6 +34,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CatalogThumb } from "./CatalogThumb";
+import { ProductImage } from "./ProductImage";
+import { useCatalogVersion } from "@/components/useCatalog";
 import { FloorSwatch } from "./FloorSwatch";
 
 export function viewCenterScene() {
@@ -78,11 +80,17 @@ function CatalogBrowser() {
   const [style, setStyle] = useState<Style | "all">("all");
   const [maxPrice, setMaxPrice] = useState(4000);
   const [maxWidth, setMaxWidth] = useState(130);
+  const [source, setSource] = useState<"all" | "retailer" | "sample">("all");
   const addItem = useEditor((s) => s.addItem);
   const previewing = useEditor((s) => !!s.preview);
+  const catalogVersion = useCatalogVersion();
+  const hasRetail = useMemo(() => searchCatalog({ source: "retailer" }).length > 0, [catalogVersion]); // eslint-disable-line react-hooks/exhaustive-deps
   const results = useMemo(
-    () => searchCatalog({ text, category, style, maxPrice: maxPrice >= 4000 ? undefined : maxPrice, maxWidth: maxWidth >= 130 ? undefined : maxWidth }),
-    [text, category, style, maxPrice, maxWidth],
+    () =>
+      searchCatalog({ text, category, style, source, maxPrice: maxPrice >= 4000 ? undefined : maxPrice, maxWidth: maxWidth >= 130 ? undefined : maxWidth })
+        // real products first
+        .sort((a, b) => (a.source === b.source ? 0 : a.source === "retailer" ? -1 : 1)),
+    [text, category, style, source, maxPrice, maxWidth, catalogVersion], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const filtersActive = style !== "all" || maxPrice < 4000 || maxWidth < 130;
 
@@ -150,9 +158,20 @@ function CatalogBrowser() {
           ))}
         </div>
       </div>
+      {hasRetail && (
+        <div className="px-3 pb-2">
+          <div className="flex rounded-md bg-muted p-0.5 text-[12px]">
+            {([["all", "All"], ["retailer", "Shop"], ["sample", "Samples"]] as const).map(([id, label]) => (
+              <button key={id} onClick={() => setSource(id)} className={cn("flex-1 rounded px-2 py-1 text-muted-foreground", source === id && "bg-card font-medium text-foreground shadow-sm")} data-testid={`source-${id}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between px-3 pb-1.5 text-[11px] text-muted-foreground">
         <span>{results.length} pieces · drag or click to place</span>
-        <span>Sample prices</span>
+        <span>{hasRetail ? "Real products first" : "Sample prices"}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 thin-scroll" data-testid="catalog-list">
         <div className="grid grid-cols-2 gap-2">
@@ -170,15 +189,19 @@ function CatalogBrowser() {
               data-testid={`catalog-${c.id}`}
               title={c.description}
             >
-              <div className="flex h-16 items-center justify-center rounded-md bg-[#f6f3ee]">
-                <CatalogThumb item={c} />
+              <div className="relative flex h-16 items-center justify-center overflow-hidden rounded-md bg-[#f6f3ee]">
+                <ProductImage item={c} size={60} />
+                {c.source === "retailer" && (
+                  <span className="absolute top-1 left-1 max-w-[85%] truncate rounded bg-card/90 px-1 text-[9.5px] font-medium text-foreground shadow-xs">{c.retailer}</span>
+                )}
+                {c.inStock === false && <span className="absolute right-1 bottom-1 rounded bg-card/90 px-1 text-[9.5px] text-warning">Out of stock</span>}
               </div>
               <div className="mt-1.5 line-clamp-1 text-[12px] font-medium leading-tight">{c.name}</div>
               <div className="mt-0.5 flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>
-                  {c.width}" × {c.depth}"
+                  {Math.round(c.width)}" × {Math.round(c.depth)}"
                 </span>
-                <span className="text-foreground/80">{formatPrice(c.price)}</span>
+                <span className={c.source === "retailer" ? "font-medium text-foreground" : "text-foreground/80"}>{formatPrice(c.price)}</span>
               </div>
               <div className="mt-1 flex gap-0.5">
                 {c.colors.slice(0, 5).map((col) => (

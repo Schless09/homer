@@ -116,9 +116,23 @@ export interface CatalogItem {
   roomTypes: RoomType[];
   resizable?: boolean;
   fixture?: boolean;
-  /** affiliate/retailer integration point; empty for built-in sample items */
+  /** retailer product page (never shown raw; buy links go through /go/<id> for tracking) */
   productUrl?: string;
-  /** a GLB model URL can be attached later; procedural geometry is the fallback */
+  /** GLB/GLTF model if the retailer provides one; procedural geometry is the fallback */
   modelUrl?: string;
   source: "sample" | "retailer" | "user";
+  /** ── retailer products only ── */
+  retailer?: string;
+  network?: AffiliateNetwork;
+  externalId?: string;
+  imageUrl?: string;
+  currency?: string;
+  inStock?: boolean;
+  /** true when the feed listed width/depth but not height (height then only affects 3D visuals) */
+  heightEstimated?: boolean;
+  /** where the dimensions came from, e.g. "feed fields", "title", "description" */
+  dimsSource?: string;
 }
+
+export const AFFILIATE_NETWORKS = ["impact", "cj", "rakuten", "awin", "shareasale", "amazon", "direct"] as const;
+export type AffiliateNetwork = (typeof AFFILIATE_NETWORKS)[number];

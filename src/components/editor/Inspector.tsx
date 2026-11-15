@@ -16,7 +16,48 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { CatalogThumb } from "./CatalogThumb";
+import { ProductImage } from "./ProductImage";
+import { buyHref, useCatalogVersion } from "@/components/useCatalog";
+import type { CatalogItem } from "@/lib/catalog/types";
+import Link from "next/link";
+
+function AffiliateNote() {
+  return (
+    <p className="text-[11px] leading-snug text-muted-foreground">
+      We may earn a commission when you buy through these links, at no extra cost to you.{" "}
+      <Link href="/disclosure" className="underline underline-offset-2" target="_blank">
+        Learn more
+      </Link>
+    </p>
+  );
+}
+
+function BuyPanel({ item }: { item: CatalogItem }) {
+  const projectId = useEditor((s) => s.projectId);
+  return (
+    <div className="space-y-2 rounded-lg border bg-card p-3" data-testid="buy-panel">
+      {item.imageUrl && (
+        <div className="flex h-32 items-center justify-center rounded-md bg-[#f6f3ee]">
+          <ProductImage item={item} size={120} />
+        </div>
+      )}
+      <div className="flex items-baseline justify-between">
+        <span className="text-[13px] font-medium">{item.retailer}</span>
+        <span className="text-[15px] font-semibold">
+          {formatPrice(item.price)}
+          {item.currency && item.currency !== "USD" ? ` ${item.currency}` : ""}
+        </span>
+      </div>
+      {item.inStock === false && <p className="text-[11px] text-warning">Listed as out of stock.</p>}
+      <Button asChild variant="brand" className="w-full">
+        <a href={buyHref(item.id, projectId, "inspector")} target="_blank" rel="sponsored noopener" data-testid="buy-link">
+          <ShoppingBag /> View & buy at {item.retailer}
+        </a>
+      </Button>
+      <AffiliateNote />
+    </div>
+  );
+}
 
 function LengthField({ label, value, onCommit, disabled }: { label: string; value: number; onCommit: (v: number) => void; disabled?: boolean }) {
   const [text, setText] = useState(formatFtIn(value));
@@ -82,10 +123,13 @@ function ItemInspector({ item, issues }: { item: Item; issues: Issue[] }) {
   const toggleLock = useEditor((s) => s.toggleLockSelected);
   const previewing = useEditor((s) => !!s.preview);
   const scene = useEditor((s) => s.scene);
+  const catalogVersion = useCatalogVersion();
   const alternatives = useMemo(() => {
     if (!c || c.fixture) return [];
-    return CATALOG.filter((x) => x.category === c.category && x.id !== c.id).slice(0, 6);
-  }, [c]);
+    return CATALOG.filter((x) => x.category === c.category && x.id !== c.id)
+      .sort((a, b) => (a.source === b.source ? Math.abs(a.width - c.width) - Math.abs(b.width - c.width) : a.source === "retailer" ? -1 : 1))
+      .slice(0, 6);
+  }, [c, catalogVersion]); // eslint-disable-line react-hooks/exhaustive-deps
   const fits = useMemo(() => {
     const without = { ...scene, items: scene.items.filter((i) => i.id !== item.id) };
     return new Map(alternatives.map((a) => [a.id, a.width <= item.width + 0.5 && a.depth <= item.depth + 0.5 ? true : fitCheck(without, a.id).fits]));
@@ -98,7 +142,7 @@ function ItemInspector({ item, issues }: { item: Item; issues: Issue[] }) {
     <div className="space-y-4 p-4 animate-fade-up" data-testid="inspector-item">
       <div className="flex gap-3">
         <div className="flex size-16 shrink-0 items-center justify-center rounded-lg bg-[#f6f3ee]">
-          <CatalogThumb item={c} color={item.color} size={56} />
+          <ProductImage item={c} color={item.color} size={56} />
         </div>
         <div className="min-w-0">
           <div className="text-[15px] leading-tight font-semibold">{item.label ?? c.name}</div>
@@ -106,7 +150,13 @@ function ItemInspector({ item, issues }: { item: Item; issues: Issue[] }) {
             {c.category.replace("-", " ")} · {c.width}" × {c.depth}" × {c.height}"
           </div>
           <div className="mt-1 flex flex-wrap gap-1">
-            {c.fixture ? <Badge variant="secondary">Floor plan fixture</Badge> : <Badge variant="outline">{formatPrice(c.price)} sample price</Badge>}
+            {c.fixture ? (
+              <Badge variant="secondary">Floor plan fixture</Badge>
+            ) : c.source === "retailer" ? (
+              <Badge variant="brand">{c.retailer} · {formatPrice(c.price)}</Badge>
+            ) : (
+              <Badge variant="outline">{formatPrice(c.price)} sample price</Badge>
+            )}
             {item.locked && !c.fixture && <Badge variant="secondary"><Lock /> Locked</Badge>}
           </div>
         </div>
@@ -157,7 +207,13 @@ function ItemInspector({ item, issues }: { item: Item; issues: Issue[] }) {
         <LengthField label="Depth" value={item.depth} disabled={!c.resizable || lockedEdit} onCommit={(v) => updateItem(item.id, { depth: Math.max(4, v) })} />
         <LengthField label="Height" value={item.height} disabled={!c.resizable || lockedEdit} onCommit={(v) => updateItem(item.id, { height: Math.max(0.5, v) })} />
       </div>
-      {!c.resizable && <p className="-mt-2 text-[11px] text-muted-foreground">Real product dimensions. Swap the piece to change size.</p>}
+      {!c.resizable && (
+        <p className="-mt-2 text-[11px] text-muted-foreground">
+          {c.source === "retailer"
+            ? `Listed by ${c.retailer}${c.dimsSource ? ` (from the ${c.dimsSource.replace(/ \(.*\)/, "")})` : ""}.${c.heightEstimated ? " Height isn't listed, so the 3D height is approximate." : ""}`
+            : "Real product dimensions. Swap the piece to change size."}
+        </p>
+      )}
 
       {c.colors.length > 0 && (
         <div className="space-y-1.5">
@@ -232,11 +288,12 @@ function ItemInspector({ item, issues }: { item: Item; issues: Issue[] }) {
                   }
                   className="flex w-full items-center gap-2 rounded-md p-1.5 text-left hover:bg-accent"
                 >
-                  <CatalogThumb item={a} size={32} />
+                  <ProductImage item={a} size={32} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12px] font-medium">{a.name}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      {a.width}" × {a.depth}" · {formatPrice(a.price)}
+                      {a.source === "retailer" ? `${a.retailer} · ` : ""}
+                      {Math.round(a.width)}" × {Math.round(a.depth)}" · {formatPrice(a.price)}
                     </span>
                   </span>
                   {fits.get(a.id) ? <Badge variant="success">Fits</Badge> : <Badge variant="warning">Tight</Badge>}
@@ -246,10 +303,10 @@ function ItemInspector({ item, issues }: { item: Item; issues: Issue[] }) {
           </div>
         </>
       )}
-      {!c.fixture && (
+      {c.source === "retailer" ? <BuyPanel item={c} /> : !c.fixture && (
         <div className="rounded-lg bg-muted/60 p-3 text-[11px] text-muted-foreground">
           <ShoppingBag className="mb-1 size-3.5" />
-          Sample catalog item. Retailer product links appear here once a product feed is connected.
+          Sample piece for planning. Switch the catalog to Shop to place a real, purchasable product of the same size.
         </div>
       )}
     </div>
@@ -395,14 +452,15 @@ function OpeningInspector({ id }: { id: string }) {
 
 function ProjectSummary({ issues }: { issues: Issue[] }) {
   const scene = useDisplayScene();
+  const projectId = useEditor((s) => s.projectId);
   const m = sceneMetrics(scene, issues);
   const furniture = scene.items.filter((i) => !i.fixed);
   const grouped = useMemo(() => {
-    const map = new Map<string, { name: string; count: number; price: number }>();
+    const map = new Map<string, { id: string; name: string; count: number; price: number; retailer?: string }>();
     for (const i of furniture) {
       const c = getCatalogItem(i.catalogId);
       if (!c) continue;
-      const g = map.get(c.id) ?? { name: c.name, count: 0, price: c.price };
+      const g = map.get(c.id) ?? { id: c.id, name: c.name, count: 0, price: c.price, retailer: c.source === "retailer" ? c.retailer : undefined };
       g.count++;
       map.set(c.id, g);
     }
@@ -432,21 +490,30 @@ function ProjectSummary({ issues }: { issues: Issue[] }) {
           <h3 className="mb-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Shopping list</h3>
           <div className="divide-y rounded-lg border bg-card">
             {grouped.map((g) => (
-              <div key={g.name} className="flex items-center justify-between px-3 py-1.5 text-[12px]">
-                <span>
+              <div key={g.id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-[12px]">
+                <span className="min-w-0">
                   {g.count > 1 && <span className="text-muted-foreground">{g.count}× </span>}
                   {g.name}
+                  {g.retailer && <span className="block text-[11px] text-muted-foreground">{g.retailer}</span>}
                 </span>
-                <span className="font-mono text-[11px]">{formatPrice(g.price * g.count)}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="font-mono text-[11px]">{formatPrice(g.price * g.count)}</span>
+                  {g.retailer && (
+                    <a href={buyHref(g.id, projectId, "shopping-list")} target="_blank" rel="sponsored noopener" className="rounded-md bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90">
+                      Buy
+                    </a>
+                  )}
+                </span>
               </div>
             ))}
             <div className="flex items-center justify-between bg-muted/50 px-3 py-1.5 text-[12px] font-semibold">
-              <span>Total (sample prices)</span>
+              <span>Total{grouped.some((g) => !g.retailer) ? " (incl. sample prices)" : ""}</span>
               <span className="font-mono">{formatPrice(m.totalPrice)}</span>
             </div>
           </div>
         </div>
       )}
+      {grouped.some((g) => g.retailer) && <AffiliateNote />}
       <p className="text-[11px] text-muted-foreground">Select a piece, wall, door or room to edit it.</p>
     </div>
   );

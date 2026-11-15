@@ -19,6 +19,7 @@ import { CanvasToolbar, StatusPill } from "./CanvasToolbar";
 import { PreviewBar } from "./PreviewBar";
 import { Onboarding } from "./Onboarding";
 import { useStorageMode } from "@/components/useStorageMode";
+import { loadRetailerCatalog } from "@/components/useCatalog";
 
 const PlanCanvas = dynamic(() => import("./plan/PlanCanvas"), { ssr: false, loading: () => <CanvasLoading label="Loading floor plan…" /> });
 const Scene3D = dynamic(() => import("./three/Scene3D"), { ssr: false, loading: () => <CanvasLoading label="Building 3D scene…" /> });
@@ -255,7 +256,8 @@ export function EditorShell({ projectId }: { projectId: string }) {
     (async () => {
       try {
         const repo = getRepository();
-        const p = await repo.get(projectId);
+        // retailer products must be registered before the scene renders items that use them
+        const [p] = await Promise.all([repo.get(projectId), Promise.race([loadRetailerCatalog(), new Promise((r) => setTimeout(r, 4000))])]);
         if (cancelled) return;
         if (!p) {
           setState("missing");

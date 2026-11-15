@@ -5,6 +5,7 @@ import { runDemoDesigner } from "@/lib/ai/demo";
 import { runClaudeDesigner } from "@/lib/ai/server/claude";
 import { aiConfig } from "@/lib/ai/server/config";
 import { applyActions } from "@/lib/scene/actions";
+import { loadRetailerCatalog } from "@/lib/catalog/server";
 
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
@@ -21,6 +22,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request.", details: parsed.error.issues.slice(0, 5) }, { status: 400 });
   }
   const req = parsed.data;
+  // retailer products must be registered so the solver, validator and AI can use them
+  await loadRetailerCatalog();
   let res: DesignResponse;
   if (aiConfig().claude) {
     try {

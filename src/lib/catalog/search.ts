@@ -9,6 +9,8 @@ export interface CatalogQuery {
   maxWidth?: number;
   maxDepth?: number;
   includeFixtures?: boolean;
+  /** "retailer" = real, purchasable products from connected feeds */
+  source?: "all" | "retailer" | "sample";
 }
 
 /**
@@ -26,13 +28,14 @@ export const sampleCatalogProvider: CatalogProvider = {
     const text = q.text?.trim().toLowerCase();
     return CATALOG.filter((c) => {
       if (!q.includeFixtures && c.fixture) return false;
+      if (q.source && q.source !== "all" && c.source !== q.source) return false;
       if (q.category && q.category !== "all" && c.category !== q.category) return false;
       if (q.style && q.style !== "all" && !c.styles.includes(q.style)) return false;
       if (q.maxPrice !== undefined && c.price > q.maxPrice) return false;
       if (q.maxWidth !== undefined && c.width > q.maxWidth) return false;
       if (q.maxDepth !== undefined && c.depth > q.maxDepth) return false;
       if (text) {
-        const hay = `${c.name} ${c.category} ${c.description} ${c.styles.join(" ")} ${c.materials.join(" ")}`.toLowerCase();
+        const hay = `${c.name} ${c.category} ${c.description} ${c.styles.join(" ")} ${c.materials.join(" ")} ${c.retailer ?? ""}`.toLowerCase();
         return text.split(/\s+/).every((t) => hay.includes(t));
       }
       return true;

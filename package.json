@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "check:solver": "npx tsx --tsconfig tsconfig.json scripts/solver-smoke.ts && npx tsx --tsconfig tsconfig.json scripts/templates-check.ts"
+    "check:solver": "npx tsx --tsconfig tsconfig.json scripts/solver-smoke.ts && npx tsx --tsconfig tsconfig.json scripts/templates-check.ts",
+    "feed:import": "npx tsx --tsconfig tsconfig.json scripts/import-feed.ts",
+    "feed:check": "npx tsx --tsconfig tsconfig.json scripts/feed-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

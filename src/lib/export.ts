@@ -38,13 +38,25 @@ export function slug(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "project";
 }
 
-export function shoppingListCsv(p: Project): string {
-  const rows = [["Item", "Category", "Width (in)", "Depth (in)", "Height (in)", "Color", "Material", "Sample price (USD)"]];
+export function shoppingListCsv(p: Project, origin = typeof window !== "undefined" ? window.location.origin : ""): string {
+  const rows = [["Item", "Retailer", "Category", "Width (in)", "Depth (in)", "Height (in)", "Color", "Material", "Price (USD)", "Buy link"]];
   for (const i of p.scene.items) {
     const c = getCatalogItem(i.catalogId);
     if (!c || c.fixture) continue;
     const color = c.colors.find((x) => x.hex === i.color)?.name ?? i.color ?? "";
-    rows.push([c.name, c.category, String(i.width), String(i.depth), String(i.height), color, i.material ?? "", String(c.price)]);
+    const retail = c.source === "retailer";
+    rows.push([
+      c.name,
+      retail ? (c.retailer ?? "") : "Sample (not for sale)",
+      c.category,
+      String(i.width),
+      String(i.depth),
+      String(i.height),
+      color,
+      i.material ?? "",
+      String(c.price),
+      retail ? `${origin}/go/${encodeURIComponent(c.id)}?from=csv&p=${encodeURIComponent(p.id)}` : "",
+    ]);
   }
   return rows.map((r) => r.map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
 }

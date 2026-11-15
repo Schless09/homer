@@ -273,6 +273,12 @@ export default function Dashboard() {
             ))}
           </div>
         </section>
+        <footer className="mt-16 border-t pt-6 text-[12px] text-muted-foreground">
+          Some products link to retail partners; we may earn a commission when you buy.{" "}
+          <Link href="/disclosure" className="underline underline-offset-2">
+            Affiliate disclosure
+          </Link>
+        </footer>
       </main>
     </div>
   );

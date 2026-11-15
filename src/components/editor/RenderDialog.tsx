@@ -67,7 +67,8 @@ export function RenderDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       const pieces = sc.items.filter((i) => !i.fixed).map((i) => {
         const c = getCatalogItem(i.catalogId);
         const color = c?.colors.find((x) => x.hex === i.color)?.name;
-        return `${color ? color.toLowerCase() + " " : ""}${c?.name ?? "furniture"}`;
+        // real products are named with their retailer so the render matches what the user can buy
+        return `${color && color !== "As shown" ? color.toLowerCase() + " " : ""}${c?.name ?? "furniture"}${c?.source === "retailer" && c.retailer ? ` from ${c.retailer}` : ""}`;
       });
       const r = await fetch("/api/ai/render", {
         method: "POST",

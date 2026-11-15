@@ -42,6 +42,20 @@ The designer never edits geometry directly. Claude calls tools (`search_catalog`
 
 All user-facing AI defaults to **Claude Haiku 5.5**. The deterministic solver and validator do the spatial reasoning, so a small model mostly has to understand intent, pick catalog pieces and call tools. Each task can be escalated independently with env vars (see `.env.example`), e.g. `ANTHROPIC_VISION_MODEL=claude-sonnet-5-5` for hard-to-read scans.
 
+## Selling real products (affiliate feeds)
+
+Retailer products flow in from affiliate network feeds and show up everywhere the sample catalog does: catalog (with a Shop filter), 2D/3D at their listed size and color, the AI designer (which prefers real, in-stock products that fit), photoreal render prompts, and the shopping list.
+
+1. **Join networks** and get approved by retailers (Impact, CJ, Rakuten, Awin, ShareASale, Amazon Associates). Each gives you a product feed URL (CSV/TSV/JSON) whose links already carry your affiliate ID.
+2. **Import.** Either:
+   - one-off: `npm run feed:import -- --file feed.csv --retailer "Article" --network impact` (writes `src/data/retailer-catalog.json`, bundled with the app), or add `--supabase` to write to the database; or
+   - daily: set `HOMER_FEEDS`, `HOMER_SUPABASE_SECRET_KEY` and `CRON_SECRET` on Vercel. `vercel.json` schedules `/api/feeds/sync`, which upserts products and deactivates ones that left the feed.
+3. **Get paid.** Every Buy button goes through `/go/<product>`, which logs the click in `homer_affiliate_clicks` and adds a unique click ID to the network's sub-ID parameter (`subId1`, `sid`, `u1`, `clickref`, `afftrack`, Amazon `ascsubtag`). Commission reports in each network dashboard show that ID, so every sale can be traced to a click and project. The redirect only ever goes to the stored product URL.
+
+What the importer does: classifies each product into a furniture type, extracts real width × depth (× height) from feed fields, titles or descriptions (inches, cm, feet), and **rejects** anything without stated dimensions, implausible sizes, or non-furniture (pillows, bedding). `npm run feed:check -- feed.csv` previews the result. Height is marked as approximate when a feed lists only the footprint. If a feed includes a GLB model URL, the 3D view loads it, fitted to the listed dimensions.
+
+Disclosure: buy links carry `rel="sponsored"`, and a commission notice appears next to them and at `/disclosure` (US FTC requirement).
+
 ## Running locally
 
 ```bash
@@ -67,7 +81,8 @@ AI routes set `maxDuration` (120 s) for longer tool loops; on the Hobby plan Ver
 ## Not built yet
 
 - Gemini (or other) providers: the AI layer is Claude-only today; `src/lib/ai/server/` is the place to add another adapter.
-- Real retailer catalog and purchase links; "upload a photo / paste a product URL" to add furniture.
+- Importing commission reports automatically (the `homer_affiliate_conversions` table is ready; today you read them in each network's dashboard).
+- "Upload a photo / paste a product URL" to add a piece that isn't in a feed.
 - Live share links and multi-user collaboration (project files work today).
 - GLB furniture models (every piece has a procedural model; `modelUrl` is reserved for this).
 - CAD (DWG/DXF) import.
