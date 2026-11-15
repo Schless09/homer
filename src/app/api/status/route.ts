@@ -10,6 +10,8 @@ export async function GET() {
     claude: cfg.claude,
     model: cfg.claude ? cfg.designerModel : null,
     imageProvider: cfg.imageProvider,
+    floorplanProvider: cfg.floorplanProvider,
+    floorplanModel: cfg.floorplanProvider === "gemini" ? cfg.geminiFloorplanModel : cfg.floorplanProvider === "claude" ? cfg.visionModel : null,
     storage: process.env.HOMER_SUPABASE_URL && process.env.HOMER_SUPABASE_KEY ? "supabase" : "local",
   };
   return NextResponse.json(body);

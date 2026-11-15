@@ -235,11 +235,11 @@ export default function NewFromUploadPage() {
                   <div className="flex items-center gap-2 text-[14px] font-semibold">
                     <ScanSearch className="size-4 text-brand" /> Read walls & rooms with AI
                   </div>
-                  {status?.claude && <Badge variant="brand">{modelLabel(status.model)}</Badge>}
+                  {status?.floorplanProvider && <Badge variant="brand">{modelLabel(status.floorplanModel)}</Badge>}
                 </div>
-                {status && !status.claude ? (
+                {status && !status.floorplanProvider ? (
                   <p className="text-[13px] text-muted-foreground">
-                    AI plan reading isn&apos;t configured on this deployment (set <code className="rounded bg-muted px-1">ANTHROPIC_API_KEY</code>). You can trace rooms quickly with the Draw room tool in the editor.
+                    AI plan reading isn&apos;t configured on this deployment (set <code className="rounded bg-muted px-1">GEMINI_API_KEY</code>). You can trace rooms quickly with the Draw room tool in the editor.
                   </p>
                 ) : (
                   <>

@@ -40,7 +40,14 @@ The designer never edits geometry directly. Claude calls tools (`search_catalog`
 
 ### Model choice and cost
 
-All user-facing AI defaults to **Claude Haiku 5.5**. The deterministic solver and validator do the spatial reasoning, so a small model mostly has to understand intent, pick catalog pieces and call tools. Each task can be escalated independently with env vars (see `.env.example`), e.g. `ANTHROPIC_VISION_MODEL=claude-sonnet-5-5` for hard-to-read scans.
+| Job | Model | Why |
+|---|---|---|
+| AI interior designer (chat + tool use) | Claude Haiku 5.5 | The solver and validator do the spatial math; a small model picks pieces and calls tools reliably and cheaply. |
+| Product photo look descriptions | Claude Haiku 5.5 | Simple visual description, once per product at import. |
+| Floor plan geometry from images | Gemini 3.6 Flash (fallback 2.5 Flash) | Strong at locating things in images; reads a plan in about 10 s with low thinking. Claude is used if no Gemini key is set. |
+| Photorealistic renders with product photos | Gemini image model | Accepts several reference images, so renders show the actual products. |
+
+Gemini calls retry on overload and fall back to a second model. Floor plan output is validated, then cleaned up: built-ins are snapped against their wall facing into the room, doorway gaps are bridged, and "walls" inside a room (usually misread fixture edges) are dropped. The suggested scale comes from printed dimensions and room labels, corrected for wall thickness, and the user always confirms it. Model choices can be changed with env vars (see `.env.example`).
 
 ## Selling real products (affiliate feeds)
 
@@ -56,7 +63,7 @@ What the importer does: classifies each product into a furniture type, extracts 
 
 **How products look.** Each product gets a structured look description: colors, main and frame materials, leg/arm/back style, tufting, cushions, silhouette, rug pattern, finish. With `ANTHROPIC_API_KEY` set, Claude Haiku reads each product photo once at import (about $0.0002 per product; unchanged photos are reused on later syncs). Without a key it's derived from the title and description. The 3D models use it to swap materials (bouclé, velvet, leather, linen, wood, marble, rattan, lacquer…), legs (tapered, turned, hairpin, sled, pedestal, plinth…), arms, backs, tufting and rug patterns, so real products look like themselves while staying exactly to scale.
 
-**Renders with the real products.** With `HOMER_GEMINI_API_KEY`, "Visualize" sends the 3D snapshot plus up to 6 product photos (largest pieces first, fetched server-side from the catalog only) to Gemini's image model, which replaces each simplified piece with the actual product. Renders are labeled as AI-generated previews; the 3D scene stays the dimensional source of truth. Check each affiliate program's terms for using product images in generated imagery.
+**Renders with the real products.** With a Gemini key (`HOMER_GEMINI_API_KEY` or `GEMINI_API_KEY`), "Visualize" sends the 3D snapshot plus up to 6 product photos (largest pieces first, fetched server-side from the catalog only) to Gemini's image model, which replaces each simplified piece with the actual product. Renders are labeled as AI-generated previews; the 3D scene stays the dimensional source of truth. Check each affiliate program's terms for using product images in generated imagery.
 
 Disclosure: buy links carry `rel="sponsored"`, and a commission notice appears next to them and at `/disclosure` (US FTC requirement).
 

@@ -32,5 +32,7 @@ export interface AIStatus {
   claude: boolean;
   model: string | null;
   imageProvider: string | null;
+  floorplanProvider: "gemini" | "claude" | null;
+  floorplanModel: string | null;
   storage: "local" | "supabase";
 }

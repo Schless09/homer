@@ -1,5 +1,6 @@
 import "server-only";
-import { aiConfig } from "./config";
+import { aiConfig, geminiKey } from "./config";
+import { geminiGenerate } from "./floorplan-gemini";
 
 /**
  * Photorealistic rendering is an asynchronous job behind a provider seam.
@@ -50,7 +51,7 @@ function splitDataUrl(dataUrl: string): { mimeType: string; data: string } {
  * Gemini image generation is synchronous (~10-30 s), so the "job" completes in
  * the start call and the client's polling loop simply sees it succeeded.
  */
-export function gemini(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): RenderProvider {
+export function gemini(apiKey: string, model: string, fetchImpl: typeof fetch = fetch, fallbackModel?: string): RenderProvider {
   return {
     id: "gemini",
     usesReferences: true,
@@ -60,14 +61,13 @@ export function gemini(apiKey: string, model: string, fetchImpl: typeof fetch = 
       references.forEach((r, i) => {
         parts.push({ text: `Image ${i + 2} — product reference: ${r.label}` }, { inline_data: { mime_type: r.mimeType, data: r.data } });
       });
-      const res = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: "POST",
-        headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
-        signal: AbortSignal.timeout(55_000),
-      });
-      if (!res.ok) throw new Error(`Render provider error ${res.status}: ${(await res.text()).slice(0, 300)}`);
-      const body = (await res.json()) as { candidates?: { content?: { parts?: { inlineData?: { mimeType: string; data: string }; inline_data?: { mime_type: string; data: string } }[] }; finishReason?: string }[] };
+      const { json } = await geminiGenerate(
+        apiKey,
+        [model, ...(fallbackModel && fallbackModel !== model ? [fallbackModel] : [])],
+        { contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["TEXT", "IMAGE"] } },
+        { fetchImpl, timeoutMs: 55_000, attempts: 2 },
+      );
+      const body = json as { candidates?: { content?: { parts?: { inlineData?: { mimeType: string; data: string }; inline_data?: { mime_type: string; data: string } }[] }; finishReason?: string }[] };
       const outParts = body.candidates?.[0]?.content?.parts ?? [];
       for (const p of outParts) {
         const d = p.inlineData ?? (p.inline_data ? { mimeType: p.inline_data.mime_type, data: p.inline_data.data } : undefined);
@@ -115,9 +115,8 @@ function replicate(token: string, model: string): RenderProvider {
 
 export function renderProvider(): RenderProvider | null {
   const cfg = aiConfig();
-  // a Homer-specific key so another app's Gemini quota/billing is never used
-  const geminiKey = process.env.HOMER_GEMINI_API_KEY;
-  if (geminiKey) return gemini(geminiKey, cfg.geminiImageModel);
+  const key = geminiKey();
+  if (key) return gemini(key, cfg.geminiImageModel, fetch, cfg.geminiImageFallback);
   const token = process.env.REPLICATE_API_TOKEN;
   if (token) return replicate(token, cfg.replicateModel);
   return null;
